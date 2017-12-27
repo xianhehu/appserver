@@ -1,0 +1,25 @@
+import java.net.Socket;
+import java.util.LinkedList;
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class WebComm {
+	private DBManager                     dbm           = null;
+	private LinkedList<Socket>            sock_list     = null;
+	private LinkedBlockingQueue<WebNsReq> webnsreqqueue = null;
+	
+
+	public WebComm(int port, DBManager db, LinkedBlockingQueue<WebNsReq> queue) {
+		// TODO Auto-generated constructor stub
+		dbm           = db;
+		webnsreqqueue = queue;
+	}
+
+	class WebListen implements Runnable {
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+}

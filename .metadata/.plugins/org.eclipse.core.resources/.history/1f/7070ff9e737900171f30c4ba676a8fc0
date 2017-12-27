@@ -1,0 +1,84 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonObject;
+
+public class NsUlDecoder implements Runnable {
+	LinkedBlockingQueue msgqueue;
+
+	public NsUlDecoder() {
+		// TODO Auto-generated constructor stub
+		msgqueue = new LinkedBlockingQueue();
+	}
+
+	public void run() {
+		// TODO Auto-generated method stub
+		while(true) {
+			if (msgqueue.isEmpty()) {
+				continue;
+			}
+			
+			NsUlMsg msg = (NsUlMsg) msgqueue.poll();
+			
+			switch (msg.type) {
+			case 1: {
+				if (msg.jmsg.has("MoteULData")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("MoteULData");
+					
+					long   DevEUI  = data.get("DevEUI").getAsLong();
+					long   GwID    = data.get("GwID").getAsLong();
+					long   DevAddr = data.get("DevAddr").getAsLong();
+					long   FPort   = data.get("FPort").getAsLong();
+					long   FcntDown= data.get("FcntDown").getAsLong();
+					long   FcntUp  = data.get("FcntUp").getAsLong();
+					long   ULFreq  = data.get("ULFreq").getAsLong();
+					long   Tmst    = data.get("Tmst").getAsLong();
+					long   RSSI    = data.get("RSSI").getAsLong();
+					long   SNR     = data.get("SNR").getAsLong();
+					long   DataLen = data.get("DataLen").getAsLong();
+					
+					String DataRate = data.get("DataRate").getAsString();
+					String CodeRate = data.get("CodeRate").getAsString();
+					String RecvTime = data.get("RecvTime").getAsString();
+					String AppData  = data.get("AppData").getAsString();
+
+					
+				}
+				break;
+			}
+			case 2: {
+				
+				
+				break;
+			}
+			case 3: {
+				if (msg.jmsg.has("GWDemoStat")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("GWDemoStat");
+					
+					long   GwID    = data.get("GwID").getAsLong();
+					long   Alti = data.get("Alti").getAsLong();
+					long   RxNb   = data.get("RxNb").getAsLong();
+					long   RxOK= data.get("RxOK").getAsLong();
+					long   RxFw  = data.get("RxFw").getAsLong();
+					long   AckR  = data.get("AckR").getAsLong();
+					long   DwNb    = data.get("DwNb").getAsLong();
+					long   TxNb    = data.get("TxNb").getAsLong();
+					
+					float   Lati     = data.get("Lati").getAsFloat();
+					float   Long = data.get("Long").getAsFloat();
+					
+					String Time = data.get("Time").getAsString();
+
+
+					
+				}
+				
+				break;
+			}
+			case 4: {
+				
+				break;
+			}
+			}
+		}
+	}
+}

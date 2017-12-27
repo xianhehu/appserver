@@ -1,0 +1,5 @@
+
+public class WebNsDevUptReq {
+	boolean update = false;
+	
+}

@@ -1,0 +1,3 @@
+使用eclipse打开工程，需要安装mysql数据库。
+
+AppServer同时和多个web客户端以及loraserver通信，实现应用数据的转发和保存。

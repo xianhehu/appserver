@@ -1,0 +1,33 @@
+import com.google.gson.JsonObject;
+
+public class NsDlMsg {
+	public long       id;
+	public int        version;
+	public int        type;
+	public JsonObject jmsg;
+	
+	public int getBytes(byte[] buf) {
+		int i = 0;
+		
+		buf[i++] = 's';
+		buf[i++] = 't';
+		buf[i++] = 'a';
+		buf[i++] = 'r';
+		buf[i++] = 't';
+		buf[i++] = (byte) version;
+		
+		buf[i++] = (byte) (id>>24);
+		buf[i++] = (byte) (id>>16);
+		buf[i++] = (byte) (id>> 8);
+		buf[i++] = (byte) (id>> 0);
+		
+		buf[i++] = (byte) (type>> 8);
+		buf[i++] = (byte) (type>> 0);
+		
+		int len = jmsg.toString().length();
+		
+		
+		return 0;
+	}
+}
+

@@ -1,0 +1,247 @@
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.stream.JsonReader;
+import com.sun.webkit.Timer;
+
+public class WebComm {
+	private int                           port          = 5001;
+	private DBManager                     dbm           = null;
+	private LinkedList<Socket>            sock_list     = null;
+	private LinkedBlockingQueue<WebNsReq> webnsreqqueue = null;
+	private LinkedBlockingQueue<WebReq>   webreqqueue   = null;
+
+	public WebComm(int p, DBManager db, LinkedBlockingQueue<WebNsReq> queue) {
+		// TODO Auto-generated constructor stub
+		dbm           = db;
+		port          = p;
+		webnsreqqueue = queue;
+		webreqqueue   = new LinkedBlockingQueue<WebReq>();
+	}
+
+	class WebListen implements Runnable {
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			ServerSocket serv = null;
+			
+			try {
+				serv = new ServerSocket(port);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return;
+			}
+			
+			while (true) {
+				try {
+					Socket s = serv.accept();
+					sock_list.add(s);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	class WebUpLink implements Runnable {
+		
+		private boolean validWebReq() {
+			return false;
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+	
+	class WebDnLink implements Runnable {
+		
+
+		@Override
+		public void run() {
+			JsonParser jparser = new JsonParser();
+			
+			while (true) {
+				// TODO Auto-generated method stub
+				Iterator<Socket> iterator = sock_list.iterator();
+				Socket s = null;
+				
+				while ((s = iterator.next()) != null) {
+					if (s.isClosed()) {
+						sock_list.remove(s);
+					}
+					
+					byte[] buf = new byte[2048];
+					
+					try {
+						int len = s.getInputStream().read(buf);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+						try {
+							s.close();
+							sock_list.remove(s);
+						} catch (IOException e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();
+						}
+						
+						continue;
+					}
+
+					String     str    = new String(buf);
+					JsonObject jreq   = (JsonObject) jparser.parse(str);
+					WebReq     webreq = new WebReq();
+
+					webreq.sock = s;
+					webreq.jmsg = jreq;
+					webreqqueue.add(webreq);
+					sock_list.remove(s);
+				}
+			}
+		}
+	}
+
+	class WebReqHandle implements Runnable {
+		boolean validSession(WebReq webreq) {
+			
+			return false;
+		}
+		
+		void invalidReq(WebReq webreq) {
+			
+		}
+		
+		void login(WebReq webreq) {
+			
+		}
+		
+		void getDevs(WebReq webreq) {
+			
+		}
+		
+		void uptDevs(WebReq webreq) {
+			
+		}
+		
+		void getDevInfs(WebReq webreq) {
+			
+		}
+		
+		void cfgDevInfs(WebReq webreq) {
+			
+		}
+		
+		void getGws(WebReq webreq) {
+			
+		}
+		
+		void getGwInfs(WebReq webreq) {
+			
+		}
+		
+		void cfgGwInfs(WebReq webreq) {
+			
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			while(true) {
+				if (webreqqueue.isEmpty()) {
+					continue;
+				}
+
+				WebReq webreq = webreqqueue.poll();
+				if (!webreq.jmsg.has("Type")) {
+					invalidReq(webreq);
+					continue;
+				}
+				
+				String Type = webreq.jmsg.get("Type").getAsString();
+				if (Type.equals("Login")) {
+					login(webreq);
+				}
+				else {
+					if (!validSession(webreq)) {
+						continue;
+					}
+					
+					if (Type.equals("GetDevs")) {
+						getDevs(webreq);
+						continue;
+					}
+					if (Type.equals("UptDevs")) {
+						uptDevs(webreq);
+						continue;
+					}
+					if (Type.equals("GetMoteInfos")) {
+						getDevInfs(webreq);
+						continue;
+					}
+					if (Type.equals("CfgMoteInfos")) {
+						cfgDevInfs(webreq);
+					}
+					if (Type.equals("GetGws")) {
+						getGws(webreq);
+						continue;
+					}
+					if (Type.equals("GetGwInfos")) {
+						getGwInfs(webreq);
+						continue;
+					}
+					if (Type.equals("CfgGwInfos")) {
+						cfgGwInfs(webreq);
+					}
+				}
+			}
+		}
+	}
+	
+	class WebReqTimeout implements Runnable {
+		void reqTimeout(WebNsReq wnreq) {
+			
+		}
+		
+		void reqResult(WebNsReq wnreq) {
+			
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			Iterator<WebNsReq> iterator = webnsreqqueue.iterator();
+			
+			WebNsReq wnreq = null;
+			
+			while((wnreq = iterator.next()) != null) {
+				long now = Common.getTime();
+				
+				if (now>wnreq.time+wnreq.timeout) {
+					reqTimeout(wnreq);
+				}
+			}
+		}
+	}
+	
+	class WebReq {
+		public Socket      sock = null;
+		public JsonObject  jmsg = null;
+	}
+	
+	class WebAck {
+		public Socket      sock = null;
+		public JsonObject  jmsg = null;
+	}
+}

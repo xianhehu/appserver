@@ -1,0 +1,6 @@
+
+public class DBManager {
+	public DBManager(String user, String passwd) {
+		// TODO Auto-generated constructor stub
+	}
+}

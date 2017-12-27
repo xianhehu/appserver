@@ -1,0 +1,10 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class WebComm {
+	private DBManager                     dbm           = null;
+	private LinkedBlockingQueue<WebNsReq> webnsreqqueue = null;
+	
+	public WebComm(DBManager db, LinkedBlockingQueue<WebNsReq> queue) {
+		// TODO Auto-generated constructor stub
+	}
+}

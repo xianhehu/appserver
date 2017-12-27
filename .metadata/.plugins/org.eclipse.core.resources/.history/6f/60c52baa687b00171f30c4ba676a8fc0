@@ -1,0 +1,11 @@
+import java.util.ArrayList;
+
+public class WebNsDevUptReq {
+	boolean          update  = false;
+	ArrayList<Long>  devlist = null;
+	
+	public WebNsDevUptReq() {
+		// TODO Auto-generated constructor stub
+		devlist = new ArrayList<Long>();
+	}
+}

@@ -1,0 +1,46 @@
+
+public class Common {
+	static short b2int16(byte[] buf) {
+		short ret = 0;
+		
+		ret += buf[0]<<8;
+		ret += buf[1]<<0;
+		
+		return ret;
+	}
+	
+	static int b2int32(byte[] buf) {
+		int ret = 0;
+		
+		ret += buf[0]<<24;
+		ret += buf[1]<<16;
+		ret += buf[2]<< 8;
+		ret += buf[3]<< 0;
+		
+		return ret;
+	}
+	
+	static long b2int64(byte[] buf) {
+		long ret = 0;
+		
+		ret += buf[0]<<56;
+		ret += buf[1]<<48;
+		ret += buf[2]<<40;
+		ret += buf[3]<<32;
+		ret += buf[4]<<24;
+		ret += buf[5]<<16;
+		ret += buf[6]<< 8;
+		ret += buf[7]<< 0;
+		
+		return ret;
+	}
+	
+	static byte[] subbytes(byte[] buf, int start, int end) {
+		byte[] ret = new byte[2048];
+		System.arraycopy(buf, start, ret, 0, end-start);
+		
+		return ret;
+	}
+	
+	
+}

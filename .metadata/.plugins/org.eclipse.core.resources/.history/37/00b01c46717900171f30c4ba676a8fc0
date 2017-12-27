@@ -1,0 +1,45 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonObject;
+
+public class NsUlDecoder implements Runnable {
+	LinkedBlockingQueue msgqueue;
+
+	public NsUlDecoder() {
+		// TODO Auto-generated constructor stub
+		msgqueue = new LinkedBlockingQueue();
+	}
+
+	public void run() {
+		// TODO Auto-generated method stub
+		while(true) {
+			if (msgqueue.isEmpty()) {
+				continue;
+			}
+			
+			NsUlMsg msg = (NsUlMsg) msgqueue.poll();
+			
+			switch (msg.type) {
+			case 1: {
+				if (msg.jmsg.has("MoteULData")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("MoteULData");
+					long DevEUI = 
+				}
+				break;
+			}
+			case 2: {
+				
+				break;
+			}
+			case 3: {
+				
+				break;
+			}
+			case 4: {
+				
+				break;
+			}
+			}
+		}
+	}
+}

@@ -1,0 +1,49 @@
+import java.util.Date;
+
+public class Common {
+	static short b2int16(byte[] buf) {
+		int ret = 0;
+		
+		ret = (buf[0] & 0xFF) << 8 |   
+              (buf[1] & 0xFF) << 0;
+		
+		return (short)ret;
+	}
+	
+	static int b2int32(byte[] buf) {
+		int ret = 0;
+		
+		ret += (buf[0]&0xff)<<24;
+		ret += (buf[1]&0xff)<<16;
+		ret += (buf[2]&0xff)<< 8;
+		ret += (buf[3]&0xff)<< 0;
+		
+		return ret;
+	}
+	
+	static long b2int64(byte[] buf) {
+		long ret = 0;
+		
+		ret += (char)buf[0]<<56;
+		ret += (char)buf[1]<<48;
+		ret += (char)buf[2]<<40;
+		ret += (char)buf[3]<<32;
+		ret += (char)buf[4]<<24;
+		ret += (char)buf[5]<<16;
+		ret += (char)buf[6]<< 8;
+		ret += (char)buf[7]<< 0;
+		
+		return ret;
+	}
+	
+	static byte[] subbytes(byte[] buf, int start, int end) {
+		byte[] ret = new byte[end-start];
+		System.arraycopy(buf, start, ret, 0, end-start);
+		
+		return ret;
+	}
+	
+	static long getTime() {
+		return new Date().getTime();
+	}
+}

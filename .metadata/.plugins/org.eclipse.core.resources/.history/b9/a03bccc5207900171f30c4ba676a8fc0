@@ -1,0 +1,13 @@
+import com.google.gson.JsonArray;
+
+public class NsUlMsg {
+	public int       id;
+	public int       version;
+	public int       type;
+	public JsonArray jmsg;
+
+	static void Load(byte[] bmsg) {
+		String start = new String(bmsg);
+		
+	}
+}

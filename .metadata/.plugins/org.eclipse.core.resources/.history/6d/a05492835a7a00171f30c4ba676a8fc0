@@ -1,0 +1,7 @@
+
+public class WebComm {
+	private DBManager dbm = null;
+	public WebComm(DBManager db) {
+		// TODO Auto-generated constructor stub
+	}
+}

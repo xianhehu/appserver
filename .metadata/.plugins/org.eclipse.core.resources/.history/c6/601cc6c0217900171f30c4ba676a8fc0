@@ -1,0 +1,19 @@
+import com.google.gson.JsonArray;
+
+public class NsUlMsg {
+	public long      id;
+	public int       version;
+	public int       type;
+	public JsonArray jmsg;
+
+    boolean Load(byte[] bmsg) {
+		String start = new String(bmsg).substring(0, 5);
+	    if (!start.equals("start")) {
+	    	return false;
+	    }
+	    
+	    version = bmsg[5];
+		
+	    return true;
+	}
+}

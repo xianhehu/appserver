@@ -1,0 +1,15 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class Main {
+	public static void main(String[] args) {
+		LinkedBlockingQueue<WebNsReq> webnsreqqueue = new LinkedBlockingQueue<WebNsReq>();
+		
+		DBManager db1 = new DBManager("127.0.0.1", "root", "");
+		DBManager db2 = new DBManager("127.0.0.1", "root", "");
+		
+		NsComm  nscomm  = new NsComm(5000, db1, webnsreqqueue);
+		WebComm webcomm = new WebComm();
+
+		nscomm.start();
+	}
+}

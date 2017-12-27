@@ -1,0 +1,9 @@
+
+public class Common {
+	static short b2int16(byte[] buf) {
+		short ret = 0;
+		
+		ret += buf[0]<<8;
+		
+	}
+}

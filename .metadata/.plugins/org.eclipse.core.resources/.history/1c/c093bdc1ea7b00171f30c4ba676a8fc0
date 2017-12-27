@@ -1,0 +1,791 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+public class WebComm {
+	private int                           port          = 5001;
+	private DBManager                     dbm           = null;
+	private ArrayList<Socket>             sock_list     = null;
+	private ArrayList<WebNsReq>           webnsreqlist  = null;
+	private ArrayList<WebNsDevUptReq>     webnsuptlist  = null;
+	private LinkedBlockingQueue<WebReq>   webreqqueue   = null;
+	private LinkedBlockingQueue<WebAck>   webackqueue   = null;
+	
+	
+
+	public WebComm(int p, 
+			       DBManager db, 
+			       ArrayList<WebNsReq>       list1, 
+			       ArrayList<WebNsDevUptReq> list2) {
+		// TODO Auto-generated constructor stub
+		dbm           = db;
+		port          = p;
+		webnsreqlist  = list1;
+		webnsuptlist  = list2;
+		sock_list     = new ArrayList<Socket>();
+		webreqqueue   = new LinkedBlockingQueue<WebReq>();
+		webackqueue   = new LinkedBlockingQueue<WebAck>();
+	}
+	
+	public void start() {
+		new Thread(new WebListen()).start();
+		new Thread(new WebDnLink()).start();
+		new Thread(new WebReqHandle()).start();
+		new Thread(new WebReqTimeout()).start();
+		new Thread(new WebUpLink()).start();
+	}
+
+	private JsonArray getDevsData(String SessId) {
+		JsonArray devs   = new JsonArray();
+		String    sql    = String.format("select * from devs where DevEUI in "
+				+ "(select DevEUI from userdev where ID=(select ID from session "
+				+ "where SessId=\"%s\"))", SessId);
+		ResultSet ret   = dbm.query(sql);
+		
+		try {
+			while(ret.next()) {
+				JsonObject dev = new JsonObject();
+				
+				dev.addProperty("DevEUI"  , ret.getLong("DevEUI"));
+				dev.addProperty("GwID"    , ret.getLong("GwID"));
+				dev.addProperty("DevAddr" , ret.getLong("DevAddr"));
+				dev.addProperty("FPort"   , ret.getLong("FPort"));
+				dev.addProperty("FcntDown", ret.getLong("FcntDown"));
+				dev.addProperty("FcntUp"  , ret.getLong("FcntUp"));
+				dev.addProperty("ULFreq"  , ret.getLong("ULFreq"));
+				dev.addProperty("Tmst"    , ret.getLong("Tmst"));
+				dev.addProperty("RSSI"    , ret.getLong("RSSI"));
+				dev.addProperty("SNR"     , ret.getFloat("SNR"));
+				dev.addProperty("DataRate", ret.getString("DataRate"));
+				dev.addProperty("CodeRate", ret.getString("CodeRate"));
+				dev.addProperty("RecvTime", ret.getString("RecvTime"));
+				dev.addProperty("AppData" , ret.getString("AppData"));
+				
+				devs.add(dev);
+			}
+		}
+		catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+
+		return devs;
+	}
+	
+	private JsonArray getGwsData(String SessId) {
+		JsonArray gws   = new JsonArray();
+		String    sql   = String.format("select * from gws where GwID in "
+				+ "(select GwID from usergw where ID=(select ID from session "
+				+ "where SessId=\"%s\"))", SessId);
+		ResultSet ret   = dbm.query(sql);
+
+		try {
+			while(ret.next()) {
+				JsonObject gw = new JsonObject();
+
+				gw.addProperty("GwID", ret.getLong("GwID"  ));
+				gw.addProperty("Time", ret.getString("Time"));
+				gw.addProperty("Lati", ret.getFloat("Lati" ));
+				gw.addProperty("Long", ret.getFloat("Longi"));
+				gw.addProperty("Alti", ret.getLong("Alti")  );
+				gw.addProperty("RxNb", ret.getLong("RxNb")  );
+				gw.addProperty("RxOK", ret.getLong("RxOK")  );
+				gw.addProperty("RxFw", ret.getLong("RxFw")  );
+				gw.addProperty("AckR", ret.getLong("AckR")  );
+				gw.addProperty("DwNb", ret.getLong("DwNb")  );
+				gw.addProperty("TxNb", ret.getLong("TxNb")  );
+				
+				gws.add(gw);
+			}
+		}
+		catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+
+		return gws;
+	}
+
+	class WebListen implements Runnable {
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			ServerSocket serv = null;
+
+			try {
+				serv = new ServerSocket(port);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return;
+			}
+
+			while (true) {
+				try {
+					Socket s = serv.accept();
+
+					if (!sock_list.isEmpty()) {
+						ArrayList<Socket> list     = (ArrayList<Socket>) sock_list.clone();
+						Iterator<Socket>  iterator = list.iterator();
+						Socket s1 = null;
+	
+						while (iterator.hasNext()) {
+							s1 = iterator.next();
+
+							if (s1.isClosed()) {
+								sock_list.remove(s1);
+							}
+						}
+					}
+
+					sock_list.add(s);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	class WebUpLink implements Runnable {
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			while(true) {
+				if (webackqueue.isEmpty()) {
+					continue;
+				}
+
+				WebAck weback = webackqueue.poll();
+
+				try {
+					OutputStream out = weback.sock.getOutputStream();
+
+					System.out.println(weback.jmsg);
+					out.write(weback.jmsg.getBytes());
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	class WebDnLink implements Runnable {
+		
+
+		@Override
+		public void run() {
+			while (true) {
+				// TODO Auto-generated method stub
+				ArrayList<Socket> list = (ArrayList<Socket>) sock_list.clone();
+
+				if (list.isEmpty())
+					continue;
+
+				Iterator<Socket> iterator = list.iterator();
+				Socket s = null;
+
+				while (iterator.hasNext()) {
+					s = iterator.next();
+					if (s.isClosed()) {
+						continue;
+					}
+
+					try {
+						InputStream in = s.getInputStream();
+						int len = in.available();
+						if (len<=0) {
+							continue;
+						}
+
+						byte[] buf = new byte[len];
+						in.read(buf, 0, len);
+   						String     str    = new String(buf);
+						System.out.println(str);
+						JsonObject jreq   = new JsonParser().parse(str).getAsJsonObject();
+						WebReq     webreq = new WebReq();
+
+						webreq.sock = s;
+						webreq.jmsg = jreq;
+						webreqqueue.add(webreq);
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+						try {
+							s.close();
+						} catch (Exception e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();
+						}
+					}
+				}
+			}
+		}
+	}
+
+	class WebReqHandle implements Runnable {
+		boolean validSession(WebReq webreq) {
+			if (!(webreq.jmsg.has("SessId")&&webreq.jmsg.has("SessKey"))) {
+				invalidReq(webreq);
+				return false;
+			}
+			
+			String SessId   = webreq.jmsg.get("SessId").getAsString();
+			String SessKey  = webreq.jmsg.get("SessKey").getAsString();
+			
+			String sql = String.format("select SessKey from session where SessId=\"%s\"", SessId);
+			
+			ResultSet ret = dbm.query(sql);
+			
+			WebAck     weback = new WebAck();
+			JsonObject jmsg   = new JsonObject();
+			boolean    error  = false;
+			
+			weback.sock = webreq.sock;
+			
+			try {
+				if (!ret.next()) {
+					jmsg.addProperty("Status", 0);
+					jmsg.addProperty("Error", "Session don't exist");
+					error = true;
+				}
+				else if (!SessKey.equals(ret.getString("SessKey"))) {
+					jmsg.addProperty("Status", 0);
+					jmsg.addProperty("Error", "Session Key error");
+					error = true;
+				}
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				jmsg.addProperty("Status", 0);
+				jmsg.addProperty("Error", "Session don't exist");
+				error = true;
+			}
+			
+			if (!error) {
+				return true;
+			}
+			
+			weback.jmsg=jmsg.getAsString();
+			webackqueue.add(weback);
+			return false;
+		}
+		
+		void invalidReq(WebReq req) {
+			WebAck     ack  = new WebAck();
+			JsonObject jmsg = new JsonObject();
+			
+			jmsg.addProperty("Status", 0);
+			jmsg.addProperty("Error", "request format invalid!");
+			
+			ack.sock = req.sock;
+			ack.jmsg = jmsg.toString();
+			
+			webackqueue.add(ack);
+		}
+		
+		void login(WebReq webreq) {
+			if (!(webreq.jmsg.has("Username")&&webreq.jmsg.has("Password")
+			    &&webreq.jmsg.has("SessId")&&webreq.jmsg.has("SessKey"))) {
+				invalidReq(webreq);
+				
+				return;
+			}
+			
+			String Username = webreq.jmsg.get("Username").getAsString();
+			String Password = webreq.jmsg.get("Password").getAsString();
+			String SessId   = webreq.jmsg.get("SessId").getAsString();
+			String SessKey  = webreq.jmsg.get("SessKey").getAsString();
+			
+			String sql = String.format("select Password, ID from user where Username=\"%s\"", Username);
+			
+			ResultSet ret = dbm.query(sql);
+			
+			WebAck     weback = new WebAck();
+			JsonObject jmsg   = new JsonObject();
+			
+			weback.sock = webreq.sock;
+			
+			try {
+				if (!ret.next()) {
+					jmsg.addProperty("Status", 0);
+					jmsg.addProperty("Error", "Username don't exist");
+				}
+				else if (!Password.equals(ret.getString("Password"))) {
+					jmsg.addProperty("Status", 0);
+					jmsg.addProperty("Error", "Password error");
+				}
+				else {
+					sql = String.format("select count(*) as RowCount from session where SessId=\"%s\"", SessId);
+					
+					ret = dbm.query(sql);
+					ret.next();
+					int count = ret.getInt("RowCount");
+					
+					if (count>0) {
+						sql = String.format("update session set SessKey=\"%s\" where SessId=\"%s\"", SessKey, SessId);
+					}
+					else {
+						sql = String.format("insert into session values (\"%s\", \"%s\", %d)", SessId, SessKey, ret.getLong("ID"));
+					}
+
+					dbm.query(sql);
+					jmsg.addProperty("Status", 1);
+				}
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				jmsg.addProperty("Status", 0);
+				jmsg.addProperty("Error", "Username don't exist");
+			}
+
+			weback.jmsg=jmsg.toString();
+			webackqueue.add(weback);
+		}
+		
+		void getDevs(WebReq webreq) {
+			WebAck    ack  = new WebAck();
+			String SessId  = webreq.jmsg.get("SessId").getAsString(); 
+			
+			ack.sock       = webreq.sock;
+			ack.jmsg       = getDevsData(SessId).toString();
+			
+			webackqueue.add(ack);
+		}
+
+		void uptDevs(WebReq webreq) {
+			if (!webreq.jmsg.has("Timeout")
+			  ||!webreq.jmsg.has("SessId")) {
+				invalidReq(webreq);
+				return;
+			}
+
+			long           timeout = webreq.jmsg.get("Timeout").getAsLong();
+			String         SessId  = webreq.jmsg.get("SessId").getAsString();
+			WebNsDevUptReq req     = new WebNsDevUptReq();
+
+			req.sock    = webreq.sock;
+			req.SessId  = SessId;
+			req.timeout = timeout;
+
+			webnsuptlist.add(req);
+		}
+
+		void getDevInfs(WebReq webreq) {
+			if (!webreq.jmsg.has("SessId")) {
+				invalidReq(webreq);
+				return;
+			}
+			
+			WebAck ack     = new WebAck();
+			String SessId  = webreq.jmsg.get("SessId").getAsString();
+			String sql     = String.format("select * from devcfgs where DevEUI in (select DevEUI "
+					+ "from userdev where ID=(select ID from session where SessId=\"%s\"))", SessId);
+			JsonArray infs = new JsonArray();
+			
+			ResultSet ret  = dbm.query(sql);
+			
+			try {
+				while(ret.next()) {
+					JsonObject inf = new JsonObject();
+					
+					inf.addProperty("DevEUI"         , ret.getLong("DevEui"));
+					inf.addProperty("AppEUI"         , ret.getLong("AppEui"));
+					inf.addProperty("AppKey"         , ret.getString("AppKey"));
+					inf.addProperty("LoRaMode"       , ret.getLong("Class"));
+					inf.addProperty("MACMajorVersion", ret.getLong("Version"));
+					inf.addProperty("RXDelay1"       , ret.getLong("RX1Delay"));
+					inf.addProperty("RXDROffset1"    , ret.getLong("RX1DROffset"));
+					inf.addProperty("RXDataRate2"    , ret.getLong("RX2DataRate"));
+					inf.addProperty("RXFreq2"        , ret.getLong("RX2Freq"));
+					inf.addProperty("MaxDutyCycle"   , ret.getLong("MaxDutyCycle"));
+					inf.addProperty("ActivationMode" , ret.getLong("ActiveMode"));
+					inf.addProperty("FreqType"       , ret.getLong("FreqType"));
+					inf.addProperty("FreqPair"       , ret.getString("FreqPair"));
+
+					infs.add(inf);
+				}
+			} catch (Exception e) {
+				// TODO: handle exception
+				e.printStackTrace();
+			}
+			
+			ack.sock = webreq.sock;
+			ack.jmsg = infs.toString();
+			
+			webackqueue.add(ack);
+		}
+		
+		void cfgDevInfs(WebReq webreq) {
+			if (!(webreq.jmsg.has("Timeout")
+			   && webreq.jmsg.has("DevEUI")
+			   && webreq.jmsg.has("AppEUI")
+			   && webreq.jmsg.has("AppKey")
+			   && webreq.jmsg.has("LoRaMode")
+			   && webreq.jmsg.has("MACMajorVersion")
+			   && webreq.jmsg.has("RXDelay1")
+			   && webreq.jmsg.has("RXDROffset1")
+			   && webreq.jmsg.has("RXDataRate2")
+			   && webreq.jmsg.has("RXFreq2")
+			   && webreq.jmsg.has("MaxDutyCycle")
+			   && webreq.jmsg.has("ActivationMode")
+			   && webreq.jmsg.has("FreqType")
+			   && webreq.jmsg.has("FreqPair")
+			)) {
+				invalidReq(webreq);
+				return;
+			}
+			
+			JsonObject req = webreq.jmsg;
+			String     sql = String.format("select count(*) from devcfgs where DevEui=%d", req.get("DevEUI").getAsLong());
+			ResultSet  ret = dbm.query(sql);
+			
+			try {
+				sql="";
+				ret.next();
+				if (ret.getLong(0)>0) {
+					sql+=String.format("delete from devcfgs where DevEui=%d;", req.get("DevEUI").getAsLong());
+				}
+				
+				sql+=String.format("insert into devcfgs values (%d,%d,\"%s\",%d,%d,%d,%d,%d,%d,%d,%d,%d,\"%s\");", 
+						req.get("DevEUI").getAsLong(), req.get("AppEUI").getAsLong(), req.get("AppKey").getAsString(), 
+						req.get("LoRaMode").getAsLong(), req.get("MACMajorVersion").getAsLong(), req.get("RXDelay1").getAsLong(), 
+						req.get("RXDROffset1").getAsLong(), req.get("RXDataRate2").getAsLong(), req.get("RXFreq2").getAsLong(), 
+						req.get("MaxDutyCycle").getAsLong(), req.get("ActivationMode").getAsLong(), req.get("FreqType").getAsLong(), 
+						req.get("FreqPair").getAsString());
+				
+				dbm.query(sql);
+				
+				sql = String.format("select NsId from (select * from devs) where DevEui=%d and Count="
+						+ "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(), 
+						req.get("DevEUI").getAsLong());
+				
+				dbm.query(sql);
+				
+				WebNsReq   nsreq = new WebNsReq();
+				NsDlMsg    dlmsg = new NsDlMsg();
+				JsonObject msg   = new JsonObject();
+				
+				
+				nsreq.confirm = true;
+				nsreq.sock    = webreq.sock;
+				nsreq.timeout = req.get("Timeout").getAsLong();
+				nsreq.dlmsg   = dlmsg;
+				
+				dlmsg.id      = 
+						
+				req.remove("Timeout");
+				req.remove("SessId");
+				req.remove("SessKey");
+				req.remove("Type");
+				msg.add("MoteInfoPush", req);
+			} catch (Exception e) {
+				// TODO: handle exception
+			}
+		}
+		
+		void getGws(WebReq webreq) {
+			WebAck    ack  = new WebAck();
+			String SessId  = webreq.jmsg.get("SessId").getAsString(); 
+			
+			ack.sock       = webreq.sock;
+			ack.jmsg       = getGwsData(SessId).toString();
+			
+			webackqueue.add(ack);
+		}
+
+		void uptGws(WebReq webreq) {
+			if (!webreq.jmsg.has("Timeout")
+			  ||!webreq.jmsg.has("SessId")) {
+				invalidReq(webreq);
+				return;
+			}
+
+			long           timeout = webreq.jmsg.get("Timeout").getAsLong();
+			String         SessId  = webreq.jmsg.get("SessId").getAsString();
+			WebNsDevUptReq req     = new WebNsDevUptReq();
+
+			req.sock    = webreq.sock;
+			req.SessId  = SessId;
+			req.timeout = timeout;
+			req.type    = 1;
+
+			webnsuptlist.add(req);
+		}
+		
+		void getGwInfs(WebReq webreq) {
+			if (!webreq.jmsg.has("SessId")) {
+				invalidReq(webreq);
+				return;
+			}
+			WebAck ack     = new WebAck();
+			String SessId  = webreq.jmsg.get("SessId").getAsString();
+			String sql     = String.format("select * from gwcfgs where GwID in (select GwID "
+					+ "from usergw where ID=(select ID from session where SessId=\"%s\"))", SessId);
+			JsonArray infs = new JsonArray();
+			
+			ResultSet ret  = dbm.query(sql);
+			
+			try {
+				while(ret.next()) {
+					JsonObject inf = new JsonObject();
+					
+					inf.addProperty("GwID"   , ret.getLong("GwID"));
+					inf.addProperty("TxPower", ret.getLong("TxPower"));
+					
+					infs.add(inf);
+				}
+			} catch (Exception e) {
+				// TODO: handle exception
+				e.printStackTrace();
+			}
+			
+			ack.sock = webreq.sock;
+			ack.jmsg = infs.toString();
+			
+			webackqueue.add(ack);
+		}
+		
+		void cfgGwInfs(WebReq webreq) {
+			
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			while(true) {
+				if (webreqqueue.isEmpty()) {
+					continue;
+				}
+
+				WebReq webreq = webreqqueue.poll();
+				if (!webreq.jmsg.has("Type")) {
+					invalidReq(webreq);
+					continue;
+				}
+				
+				String Type = webreq.jmsg.get("Type").getAsString();
+				if (Type.equals("Login")) {
+					login(webreq);
+				}
+				else {
+					if (!validSession(webreq)) {
+						continue;
+					}
+					
+					if (Type.equals("GetDevs")) {
+						getDevs(webreq);
+						continue;
+					}
+					if (Type.equals("UptDevs")) {
+						uptDevs(webreq);
+						continue;
+					}
+					if (Type.equals("GetMoteInfos")) {
+						getDevInfs(webreq);
+						continue;
+					}
+					if (Type.equals("CfgMoteInfos")) {
+						cfgDevInfs(webreq);
+					}
+					if (Type.equals("GetGws")) {
+						getGws(webreq);
+						continue;
+					}
+					if (Type.equals("UptGws")) {
+						uptGws(webreq);
+						continue;
+					}
+					if (Type.equals("GetGwInfos")) {
+						getGwInfs(webreq);
+						continue;
+					}
+					if (Type.equals("CfgGwInfos")) {
+						cfgGwInfs(webreq);
+					}
+				}
+			}
+		}
+	}
+	
+	class WebReqTimeout implements Runnable {
+		void reqTimeout(WebNsReq wnreq) {
+			WebAck     ack = new WebAck();
+			JsonObject obj = new JsonObject();
+			
+			obj.addProperty("Status", 0);
+			obj.addProperty("Error" , "Timeout");
+
+			ack.sock = wnreq.sock;
+			ack.jmsg = obj.toString();
+			
+			webackqueue.add(ack);
+		}
+		
+		void reqResult(WebNsReq wnreq) {
+			WebAck     ack = new WebAck();
+			JsonObject obj = new JsonObject();
+
+			if (wnreq.state==WebNsReq.STATE_FAIL) {
+				obj.addProperty("Status", 0);
+				obj.addProperty("Error" , "Send Failed");
+			}
+			else {
+				obj.addProperty("Status", 1);
+			}
+
+			ack.sock = wnreq.sock;
+			ack.jmsg = obj.toString();
+
+			webackqueue.add(ack);
+		}
+		
+		private void updateDevs(WebNsDevUptReq req) {
+			/* check update */
+			String sql = String.format("select count(*) as RowCount from devupt where Upt>0 and "
+					+ "DevEUI in (select DevEUI from userdev where ID=(select"
+					+ " ID from session where SessId=\"%s\"))", req.SessId);
+			ResultSet ret = dbm.query(sql);
+
+			sql = String.format("update devupt set Upt=0 where DevEUI in "
+					+ "(select DevEUI from userdev where ID=(select"
+					+ " ID from session where SessId=\"%s\"))", req.SessId);
+
+			try {
+				ret.next();
+				if (ret.getInt("RowCount") <= 0) {
+					return;
+				}
+				
+				dbm.query(sql);
+
+				WebAck ack = new WebAck();
+
+				ack.sock = req.sock;
+				ack.jmsg = getDevsData(req.SessId).toString();
+
+				webackqueue.add(ack);
+				webnsuptlist.remove(req);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		private void updateGws(WebNsDevUptReq req) {
+			/* check update */
+			String sql = String.format("select count(*) as RowCount from gwupt where Upt>0 and "
+					+ "GwID in (select GwID from usergw where ID=(select"
+					+ " ID from session where SessId=\"%s\"))", req.SessId);
+			ResultSet ret = dbm.query(sql);
+
+			sql = String.format("update gwupt set Upt=0 where GwID in "
+					+ "(select GwID from usergw where ID=(select"
+					+ " ID from session where SessId=\"%s\"))", req.SessId);
+
+			try {
+				ret.next();
+				if (ret.getInt("RowCount") <= 0) {
+					return;
+				}
+				
+				dbm.query(sql);
+
+				WebAck ack = new WebAck();
+
+				ack.sock = req.sock;
+				ack.jmsg = getGwsData(req.SessId).toString();
+
+				webackqueue.add(ack);
+				webnsuptlist.remove(req);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			
+			while (true) {
+				if (!webnsreqlist.isEmpty()) {
+					ArrayList<WebNsReq> list     = (ArrayList<WebNsReq>) webnsreqlist.clone();
+					Iterator<WebNsReq>  iterator = list.iterator();
+					
+					WebNsReq req = null;
+					
+					while(iterator.hasNext()) {
+						req = iterator.next();
+						long now = Common.getTime();
+						
+						if (now>req.time+req.timeout) {
+							reqTimeout(req);
+							webnsreqlist.remove(req);
+						}
+						else if (req.state==WebNsReq.STATE_ACK || req.state==WebNsReq.STATE_FAIL) {
+							reqResult(req);
+							webnsreqlist.remove(req);
+						}
+					}
+				}
+
+				if (!webnsuptlist.isEmpty()) {
+					ArrayList<WebNsDevUptReq> reqlist  = (ArrayList<WebNsDevUptReq>) webnsuptlist.clone();
+					Iterator<WebNsDevUptReq>  itorator = reqlist.iterator();
+
+					while(itorator.hasNext()) {
+						WebNsDevUptReq req = (WebNsDevUptReq) itorator.next();
+
+						if (Common.getTime()>req.time+req.timeout) { /* ³¬Ê± */
+							WebAck ack = new WebAck();
+							JsonObject obj = new JsonObject();
+							
+							obj.addProperty("Status", 0);
+							obj.addProperty("Error" ,  "timeout");
+							
+							ack.sock = req.sock;
+							ack.jmsg = obj.toString();
+							
+							webackqueue.add(ack);
+							webnsuptlist.remove(req);
+						}
+						else {
+							if (req.type==0) {
+								updateDevs(req);
+							}
+							else {
+								updateGws(req);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	class WebReq {
+		public Socket      sock = null;
+		public JsonObject  jmsg = null;
+	}
+	
+	class WebAck {
+		public Socket      sock = null;
+		public String      jmsg = null;
+	}
+}

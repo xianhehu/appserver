@@ -1,0 +1,9 @@
+
+public class WebNsReq {
+	public long    time;
+	public int     state;
+	public NsDlMsg dlmsg;
+	
+	final public int STATE_WAIT = 0;
+	final public int STATE_SEND = 0;
+}

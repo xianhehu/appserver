@@ -1,0 +1,5 @@
+
+public class WebNsReq {
+	private NsDlMsg dlmsg;
+	private int     state;
+}

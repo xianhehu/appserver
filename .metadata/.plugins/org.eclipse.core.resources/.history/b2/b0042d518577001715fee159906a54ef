@@ -1,0 +1,16 @@
+
+class NsListen implements Runnable {
+	public NsListen() {
+		// TODO Auto-generated constructor stub
+		
+	}
+	
+	public void run() {
+		// TODO Auto-generated method stub
+		
+	}
+}
+
+public class NsComm {
+
+}

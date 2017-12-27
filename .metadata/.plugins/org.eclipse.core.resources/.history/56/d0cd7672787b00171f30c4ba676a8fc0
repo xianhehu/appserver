@@ -1,0 +1,16 @@
+import java.net.Socket;
+import java.util.ArrayList;
+
+public class WebNsDevUptReq {
+	Socket           sock    = null;
+	long             ID      = 0; // ”√ªß∫≈
+	long             time    = 0;
+	long             timeout = 0;
+	boolean          update  = false;
+	//ArrayList<Long>  devlist = null;
+
+	public WebNsDevUptReq() {
+		// TODO Auto-generated constructor stub
+		time    = Common.getTime();
+	}
+}

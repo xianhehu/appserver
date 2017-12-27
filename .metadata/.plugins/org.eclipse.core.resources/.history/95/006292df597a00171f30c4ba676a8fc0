@@ -1,0 +1,9 @@
+
+public class Main {
+	public static void main(String[] args) {
+		NsComm  nscomm  = new NsComm();
+		WebComm webcomm = new WebComm();
+
+		nscomm.start();
+	}
+}

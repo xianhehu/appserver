@@ -1,0 +1,36 @@
+import java.util.HashMap;
+import java.util.LinkedList;
+
+
+public class NsComm {
+	private HashMap nsconn_list=null;
+
+	class NsListen implements Runnable {
+		public NsListen() {
+			// TODO Auto-generated constructor stub
+			
+		}
+		
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+
+	class NsUpLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+		
+	}
+
+	class NsDnLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+}

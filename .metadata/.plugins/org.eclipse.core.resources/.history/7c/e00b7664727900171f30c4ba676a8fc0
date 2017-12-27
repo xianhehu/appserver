@@ -1,0 +1,60 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonObject;
+
+public class NsUlDecoder implements Runnable {
+	LinkedBlockingQueue msgqueue;
+
+	public NsUlDecoder() {
+		// TODO Auto-generated constructor stub
+		msgqueue = new LinkedBlockingQueue();
+	}
+
+	public void run() {
+		// TODO Auto-generated method stub
+		while(true) {
+			if (msgqueue.isEmpty()) {
+				continue;
+			}
+			
+			NsUlMsg msg = (NsUlMsg) msgqueue.poll();
+			
+			switch (msg.type) {
+			case 1: {
+				if (msg.jmsg.has("MoteULData")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("MoteULData");
+					long DevEUI = data.get("DevEUI").getAsLong();
+					long GwID   = data.get("GwID").getAsLong();
+					long DevAddr= data.get("DevAddr").getAsLong();
+					long FPort = data.get("FPort").getAsLong();
+					long FcntDown   = data.get("FcntDown").getAsLong();
+					long FcntUp= data.get("FcntUp").getAsLong();
+					long DataRate = data.get("DataRate").getAsLong();
+					long CodeRate   = data.get("CodeRate").getAsLong();
+					long ULFreq= data.get("ULFreq").getAsLong();
+					long RecvTime = data.get("RecvTime").getAsLong();
+					long Tmst   = data.get("Tmst").getAsLong();
+					long RSSI= data.get("RSSI").getAsLong();
+					long SNR= data.get("SNR").getAsLong();
+					long DataLen = data.get("DataLen").getAsLong();
+					long AppData   = data.get("AppData").getAsLong();
+
+				}
+				break;
+			}
+			case 2: {
+				
+				break;
+			}
+			case 3: {
+				
+				break;
+			}
+			case 4: {
+				
+				break;
+			}
+			}
+		}
+	}
+}

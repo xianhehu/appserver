@@ -1,0 +1,22 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class NsUlDecoder implements Runnable {
+	LinkedBlockingQueue msgqueue;
+
+	public NsUlDecoder() {
+		// TODO Auto-generated constructor stub
+		msgqueue = new LinkedBlockingQueue();
+	}
+
+	public void run() {
+		// TODO Auto-generated method stub
+		while(true) {
+			if (msgqueue.isEmpty()) {
+				continue;
+			}
+			
+			NsUlMsg msg = (NsUlMsg) msgqueue.poll();
+			
+		}
+	}
+}

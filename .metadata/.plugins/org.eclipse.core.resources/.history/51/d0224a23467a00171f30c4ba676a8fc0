@@ -1,0 +1,120 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+
+
+public class NsComm {
+	private LinkedList sock_list=null;
+	private HashMap nsconn_list=null;
+	private HashMap nsmsg_dnlink=null;
+	private int port = 0;
+	
+	public NsComm() {
+		// TODO Auto-generated constructor stub
+	}
+
+	public void start() {
+		NsListen listen=new NsListen(5000);
+		NsUpLink uplink=new NsUpLink();
+		NsDnLink dnlink=new NsDnLink();
+		
+		new Thread(listen).start();
+		new Thread(uplink).start();
+		new Thread(dnlink).start();
+	}
+
+	class NsListen implements Runnable {
+		public NsListen(int p) {
+			// TODO Auto-generated constructor stub
+			port=p;
+			sock_list    = new LinkedList();
+			nsconn_list  = new HashMap();
+			nsmsg_dnlink = new HashMap();
+		}
+
+		public void run() {
+			// TODO Auto-generated method stub
+			ServerSocket serv=null;
+			
+			try {
+				serv = new ServerSocket(port);
+			}
+			catch (Exception e) {
+				e.printStackTrace();
+				return;
+			}
+			
+			new Thread(new NsUpLink()).start();
+			new Thread(new NsDnLink()).start();
+
+			while(true) {
+				try {
+					Socket s=serv.accept();
+					sock_list.add(s);
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	class NsUpLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			while(true) {
+				if (sock_list.isEmpty()){
+					try {
+						Thread.sleep(10);
+					}
+					catch(Exception e) {
+						e.printStackTrace();
+					}
+					continue;
+				}
+				
+				Iterator iterator=sock_list.iterator();
+				
+				Socket s;
+				
+				while ((s = (Socket) iterator.next())!=null) {
+					try {
+						InputStream in=s.getInputStream();
+						if (in.available()<=0) {
+							continue;
+						}
+
+						byte[] buf=new byte[2048];
+						int len=in.read(buf);
+						NsUlMsg msg = new NsUlMsg();
+						
+						if (!msg.Load(buf)) {
+							continue;
+						}
+						
+						
+						// 处理消息
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+	}
+
+	class NsDnLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			while(true) {
+				
+			}
+		}
+	}
+}

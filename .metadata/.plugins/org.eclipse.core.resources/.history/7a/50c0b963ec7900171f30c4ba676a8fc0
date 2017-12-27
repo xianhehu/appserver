@@ -1,0 +1,7 @@
+
+public class NsDlMsg {
+	long   time;
+	byte[] buf;
+	int    len;
+}
+

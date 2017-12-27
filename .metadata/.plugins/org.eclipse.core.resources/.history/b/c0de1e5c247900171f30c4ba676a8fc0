@@ -1,0 +1,30 @@
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
+
+import jdk.nashorn.internal.parser.JSONParser;
+
+public class NsUlMsg {
+	public long      id;
+	public int       version;
+	public int       type;
+	public JsonArray jmsg;
+
+    boolean Load(byte[] bmsg) {
+		String start = new String(bmsg).substring(0, 5);
+	    if (!start.equals("start")) {
+	    	return false;
+	    }
+	    
+	    version = bmsg[5];
+	    id      = Common.b2int64(Common.subbytes(bmsg, 6, 14));
+	    type    = Common.b2int16(Common.subbytes(bmsg, 14, 16));
+	    int len = Common.b2int16(Common.subbytes(bmsg, 16, 18));
+	    
+	    String str = new String(Common.subbytes(bmsg, 18, 18+len));
+	    JsonParser parser = new JsonParser();
+	    
+	    jmsg = parser.parse(str);
+		
+	    return true;
+	}
+}

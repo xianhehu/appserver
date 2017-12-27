@@ -1,0 +1,6 @@
+
+public class WebNsReq {
+	public long    time;
+	public int     state;
+	public NsDlMsg dlmsg;
+}

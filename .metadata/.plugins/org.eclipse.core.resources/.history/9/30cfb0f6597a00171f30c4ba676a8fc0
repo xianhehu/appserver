@@ -1,0 +1,11 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
+public class Main {
+	public static void main(String[] args) {
+		LinkedBlockingQueue<WebNsReq> webnsreqqueue = new LinkedBlockingQueue<WebNsReq>();
+		NsComm  nscomm  = new NsComm();
+		WebComm webcomm = new WebComm();
+
+		nscomm.start();
+	}
+}

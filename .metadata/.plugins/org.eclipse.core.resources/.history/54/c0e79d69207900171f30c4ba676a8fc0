@@ -1,0 +1,12 @@
+import 
+
+public class NsUlMsg {
+	int    id;
+	int    version;
+	int    type;
+	
+
+	static void Load(byte[] bmsg) {
+		
+	}
+}

@@ -1,0 +1,13 @@
+import com.google.gson.JsonObject;
+
+public class NsDlMsg {
+	public long       id;
+	public int        version;
+	public int        type;
+	public JsonObject jmsg;
+	
+	public int getBytes(byte[] buf) {
+		return 0;
+	}
+}
+

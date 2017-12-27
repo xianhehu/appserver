@@ -1,0 +1,44 @@
+import java.util.ArrayList;
+
+public class Main {
+	public static void main(String[] args){
+		ArrayList<WebNsReq> webnsreqqueue = new ArrayList<WebNsReq>();
+
+		DBManager.url    = "jdbc:MySQL://localhost:3306/test";
+		if (args.length>=2) {
+			DBManager.user   = args[0];
+			DBManager.passwd = args[1];
+			System.out.println("username:"+DBManager.user+",password:"+DBManager.passwd);
+			if (args.length>2) {
+				
+			}
+		}
+		else {
+			DBManager.user   = "";
+			DBManager.passwd = "";
+		}
+
+		DBManager db = new DBManager();
+		
+		if (!db.connect()) {
+			System.out.println("connect database failed!");
+
+			return;
+		}
+
+		NsComm  nscomm  = new NsComm(5000, db, webnsreqqueue);
+		WebComm webcomm = new WebComm(1935, webnsreqqueue);
+
+		nscomm.start();
+		webcomm.start();
+		
+		while(true) {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+}

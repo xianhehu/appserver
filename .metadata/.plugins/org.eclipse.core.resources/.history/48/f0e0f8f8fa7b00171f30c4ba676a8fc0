@@ -1,0 +1,336 @@
+import java.net.Socket;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.concurrent.LinkedBlockingQueue;
+
+import com.google.gson.JsonObject;
+
+public class NsUlDecoder implements Runnable {
+	public  LinkedBlockingQueue<NsUlMsg> ulqueue;
+	public  LinkedBlockingQueue<NsDlMsg> dlqueue;
+	private ArrayList<WebNsReq>          webnsreqlist;
+	private HashMap<Long, Socket>        nsconn_list;
+	private DBManager                    dbm;
+
+	public NsUlDecoder(LinkedBlockingQueue<NsDlMsg> queue,
+			ArrayList<WebNsReq> wlist, 
+			DBManager db, 
+			HashMap<Long, 
+			Socket> slist) {
+		// TODO Auto-generated constructor stub
+		ulqueue      = new LinkedBlockingQueue<NsUlMsg>();
+		dlqueue      = queue;
+		webnsreqlist = wlist;
+		dbm          = db;
+		nsconn_list  = slist;
+	}
+
+	public void put(NsUlMsg m) {
+		try {
+			ulqueue.put(m);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	public void run() {
+		// TODO Auto-generated method stub
+		while(true) {
+			if (ulqueue.isEmpty()) {
+				continue;
+			}
+
+			NsUlMsg msg = (NsUlMsg) ulqueue.poll();
+
+			switch (msg.type) {
+			case 1: {
+				if (msg.jmsg.has("MoteULData")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("MoteULData");
+					
+					long   DevEUI  = data.get("DevEUI").getAsLong();
+					long   GwID    = data.get("GwID").getAsLong();
+					long   DevAddr = data.get("DevAddr").getAsLong();
+					long   FPort   = data.get("FPort").getAsLong();
+					long   FcntDown= data.get("FcntDown").getAsLong();
+					long   FcntUp  = data.get("FcntUp").getAsLong();
+					long   ULFreq  = data.get("ULFreq").getAsLong();
+					long   Tmst    = data.get("Tmst").getAsLong();
+					long   RSSI    = data.get("RSSI").getAsLong();
+					long   SNR     = data.get("SNR").getAsLong();
+					long   DataLen = data.get("DataLen").getAsLong();
+					
+					String DataRate = data.get("DataRate").getAsString();
+					String CodeRate = data.get("CodeRate").getAsString();
+					String RecvTime = data.get("RecvTime").getAsString();
+					String AppData  = data.get("AppData").getAsString();
+					
+					String sqlstate = String.format("select count(*) as RowCount from devs where DevEUI=%d", DevEUI);
+					ResultSet ret = dbm.query(sqlstate);
+					
+					int count = 0;
+					try {
+						ret.next();
+						count = ret.getInt("RowCount");
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					if (count>=50) {
+						count = 50;
+						sqlstate = String.format("delete * from devs where Count=1 and DevEUI=%d", DevEUI);
+						dbm.query(sqlstate);
+						sqlstate = String.format("update devs set Count=Count-1 where Count>1 and DevEUI=%d", DevEUI);
+						dbm.query(sqlstate);
+					}
+					else {
+						count++;
+					}
+					
+					sqlstate = String.format("insert into devs values (%d, %d, %d, %d, %d, "
+							+ "%d, \"%s\", \"%s\", %d, \"%s\", %d, %d, %f, %d, \"%s\", %d, %d);", DevEUI, 
+							GwID, DevAddr, FPort, FcntDown, FcntUp, DataRate, CodeRate, ULFreq, RecvTime,
+						    Tmst, RSSI, SNR, DataLen, AppData, msg.id, count);
+					dbm.query(sqlstate);
+					
+					sqlstate = String.format("select count(*) as RowCount from devupt where DevEUI=%d", DevEUI);
+					ret = dbm.query(sqlstate);
+					count = 0;
+					try {
+						ret.next();
+						count = ret.getInt("RowCount");
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					if (count>0) {
+						sqlstate = String.format("update devupt set Upt=1 where DevEUI=%d", DevEUI);
+					}
+					else {
+						sqlstate = String.format("insert into devupt values (%d, 1)", DevEUI);
+					}
+					
+					dbm.query(sqlstate);
+				}
+				break;
+			}
+			case 2: {
+				
+				
+				break;
+			}
+			case 3: {
+				if (msg.jmsg.has("GWDemoStat")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("GWDemoStat");
+					
+					long   GwID = data.get("GwID").getAsLong();
+					long   Alti = data.get("Alti").getAsLong();
+					long   RxNb = data.get("RxNb").getAsLong();
+					long   RxOK = data.get("RxOK").getAsLong();
+					long   RxFw = data.get("RxFw").getAsLong();
+					long   AckR = data.get("AckR").getAsLong();
+					long   DwNb = data.get("DwNb").getAsLong();
+					long   TxNb = data.get("TxNb").getAsLong();
+					
+					float  Lati = data.get("Lati").getAsFloat();
+					float  Long = data.get("Long").getAsFloat();
+					
+					String Time = data.get("Time").getAsString();
+
+					String sqlstate = String.format("select count(*) as RowCount from gws where GwID=%d", GwID);
+					ResultSet ret = dbm.query(sqlstate);
+					int count = 0;
+					try {
+						ret.next();
+						count = ret.getInt("RowCount");
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					if (count>0) {
+						sqlstate = String.format("delete * from gws where GwID=%d", GwID);
+						dbm.query(sqlstate);
+					}
+
+					sqlstate = String.format("insert into devs values (%d, \"%s\", %f, %f, %d, %d, %d, %d, "
+							+ "%d, %d, %d);", GwID, Time, Lati, Long, Alti, RxNb, RxOK, RxFw, AckR, DwNb, 
+							TxNb);
+					dbm.query(sqlstate);
+					
+					sqlstate = String.format("select count(*) as RowCount from gwupt where GwID=%d", GwID);
+					ret = dbm.query(sqlstate);
+					count = 0;
+					try {
+						ret.next();
+						count = ret.getInt("RowCount");
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					if (count>0) {
+						sqlstate = String.format("update gwupt set Upt=1 where GwID=%d", GwID);
+					}
+					else {
+						sqlstate = String.format("insert into gwupt values (%d, 1)", GwID);
+					}
+					
+					dbm.query(sqlstate);
+				}
+				
+				break;
+			}
+			case 4: {
+				if (msg.jmsg.has("LinkUpdate")) {
+					//JsonObject data = msg.jmsg.getAsJsonObject("LinkUpdate");
+					
+					//long   NwkLink = data.get("NwkLink").getAsLong();
+
+					nsconn_list.put(msg.id, msg.sock);
+				}
+				
+				break;
+			}
+			case 6: {
+				if (msg.jmsg.has("MoteInfoReq")) {
+					JsonObject data   = msg.jmsg.getAsJsonObject("MoteInfoReq");
+					
+					long   DevEUI     = data.get("DevEUI").getAsLong();
+
+					NsDlMsg dlmsg     = new NsDlMsg();
+					
+					dlmsg.id          = msg.id;
+					dlmsg.version     = msg.version;
+					dlmsg.type        = 7;
+					
+					JsonObject jmsg   = new JsonObject();
+					JsonObject jdata  = new JsonObject();
+					
+					String sqlstate   = String.format("select * from devcfgs where DevEUI=%d", DevEUI);
+					ResultSet ret     = dbm.query(sqlstate);
+
+					try {
+						ret.next();
+						
+						long AppEUI       = ret.getLong("AppEUI");
+						long Class        = ret.getLong("Class");
+						long Version      = ret.getLong("Version");
+						long RX1Delay     = ret.getLong("RX1Delay");
+						long RX1DROffset  = ret.getLong("RX1DROffset");
+						long RX2DataRate  = ret.getLong("RX2DataRate");
+						long RX2Freq      = ret.getLong("RX2Freq");
+						long MaxDutyCycle = ret.getLong("MaxDutyCycle");
+						long ActiveMode   = ret.getLong("ActiveMode");
+						long FreqType     = ret.getLong("FreqType");
+						
+						String AppKey     = ret.getString("AppKey");
+						String FreqPair   = ret.getString("FreqPair");
+						
+						jdata.addProperty("DevEUI"         , DevEUI);
+						jdata.addProperty("AppEUI"         , AppEUI);
+						jdata.addProperty("AppKey"         , AppKey);
+						jdata.addProperty("LoRaMode"       , Class);
+						jdata.addProperty("MacMajorVersion", Version);
+						jdata.addProperty("RXDelay1"       , RX1Delay);
+						jdata.addProperty("RXDROffset1"    , RX1DROffset);
+						jdata.addProperty("RXDataRate2"    , RX2DataRate);
+						jdata.addProperty("RXFreq2"        , RX2Freq);
+						jdata.addProperty("MaxDutyCycle"   , MaxDutyCycle);
+						jdata.addProperty("ActivationMode" , ActiveMode);
+						jdata.addProperty("FreqType"       , FreqType);
+						jdata.addProperty("FreqPair"       , FreqPair);
+						
+						jmsg.add("MoteInfoResp", jdata);
+						
+						dlmsg.jmsg = jmsg;
+						
+						dlqueue.put(dlmsg);
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+						break;
+					}
+				}
+				
+				break;
+			}
+			case 8: {
+				if (msg.jmsg.has("GwInfoReq")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("GwInfoReq");
+					
+					long   GwID = data.get("GwID").getAsLong();
+
+					NsDlMsg dlmsg     = new NsDlMsg();
+					
+					dlmsg.id          = msg.id;
+					dlmsg.version     = msg.version;
+					dlmsg.type        = 9;
+					
+					JsonObject jmsg   = new JsonObject();
+					JsonObject jdata  = new JsonObject();
+					
+					String sqlstate   = String.format("select * from gwcfgs where GwID=%d", GwID);
+					ResultSet ret     = dbm.query(sqlstate);
+
+					try {
+						ret.next();
+						
+						long TxPower         = ret.getLong("TxPower");
+						jdata.addProperty("TxPower"         , TxPower);
+						
+						jmsg.add("GwInfoResp", jdata);
+						
+						dlmsg.jmsg = jmsg;
+						dlqueue.put(dlmsg);
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+
+				break;
+			}
+			case 11: {
+				if (msg.jmsg.has("MoteInfoPushAck")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("MoteInfoPushAck");
+
+					long   DevEUI = data.get("DevEUI").getAsLong();
+					long   ACK    = data.get("ACK").getAsLong();
+
+					ArrayList<WebNsReq> list = (ArrayList<WebNsReq>) webnsreqlist.clone();
+					Iterator<WebNsReq>  itor = list.iterator();
+
+					while(itor.hasNext()) {
+						WebNsReq req = itor.next();
+						
+						if (req.dlmsg.id!=msg.id) {
+							continue;
+						}
+					}
+				}
+				
+				break;
+			}
+			case 13: {
+				if (msg.jmsg.has("GwInfoPushAck")) {
+					JsonObject data = msg.jmsg.getAsJsonObject("GwInfoPushAck");
+					
+					long   GwID = data.get("GwID").getAsLong();
+					long   ACK  = data.get("ACK").getAsLong();
+
+					
+					
+				}
+				
+				break;
+			}
+			}
+		}
+	}
+}

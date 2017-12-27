@@ -1,0 +1,57 @@
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.HashMap;
+import java.util.LinkedList;
+
+
+public class NsComm {
+	private HashMap nsconn_list=null;
+	private int port = 0;
+
+	class NsListen implements Runnable {
+		public NsListen(int p) {
+			// TODO Auto-generated constructor stub
+			port=p;
+		}
+
+		public void run() {
+			// TODO Auto-generated method stub
+			ServerSocket serv=null;
+			
+			try {
+				serv = new ServerSocket(port);
+			}
+			catch (Exception e) {
+				e.printStackTrace();
+				return;
+			}
+
+			while(true) {
+				try {
+					Socket s=serv.accept();
+					
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	class NsUpLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+		
+	}
+
+	class NsDnLink implements Runnable {
+
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+}

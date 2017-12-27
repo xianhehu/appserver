@@ -1,0 +1,62 @@
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import com.mysql.jdbc.Connection;
+import com.mysql.jdbc.Statement;
+
+public class DBManager {
+	private Connection conn;
+	private Statement  sql;
+	static public String url;
+	static public String user;
+	static public String passwd;
+
+	public boolean start() {
+		// TODO Auto-generated constructor stub
+		try{
+            //调用Class.forName()方法加载驱动程序
+            Class.forName("com.mysql.jdbc.Driver");
+            System.out.println("成功加载MySQL驱动！");
+            
+            return true;
+        }catch(ClassNotFoundException e1){
+            System.out.println("找不到MySQL驱动!");
+            e1.printStackTrace();
+            
+            return false;
+        }
+	}
+	
+	public boolean connect() {
+		// TODO Auto-generated method stub
+		try {
+            conn = (Connection) DriverManager.getConnection(url, user, passwd);
+            //创建一个Statement对象
+            Statement stmt = (Statement) conn.createStatement(); //创建Statement对象
+            sql = stmt;
+            System.out.print("成功连接到数据库！");
+        } catch (SQLException e){
+            e.printStackTrace();
+            System.out.print("连接到数据库失败！");
+            return false;
+        }
+		
+		return true;
+	}
+
+	public ResultSet query(String state) {
+		try {
+			if (sql.isClosed()) {
+				connect();
+			}
+			sql.execute(state);
+			return sql.getResultSet();
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.out.print(state+"执行失败！");
+			connect();
+            return null;
+		}
+	}
+}
