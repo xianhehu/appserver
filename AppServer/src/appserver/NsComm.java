@@ -1,62 +1,67 @@
+﻿package appserver;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.net.*;
+import java.util.*;
 
+import org.apache.log4j.Logger;
 
 public class NsComm {
-	private LinkedList<Socket>            sock_list   = null;
-	private LinkedBlockingQueue<NsDlMsg>  nsdlqueue   = null;
-	private int                           port        = 0;
-	private DBManager                     dbm         = null;
-	private NsUlDecoder                   uldecoder   = null;
-	private ArrayList<WebNsReq>           webnsgreq   = null;
-	
-	public NsComm(int p, DBManager db, ArrayList<WebNsReq> req) {
-		// TODO Auto-generated constructor stub
-		port        = p;
-		dbm         = db;
-		webnsgreq   = req;
-		sock_list   = new LinkedList<Socket>();
-		nsdlqueue   = new LinkedBlockingQueue<NsDlMsg>();
-		uldecoder   = new NsUlDecoder(nsdlqueue, req, dbm);
-		new Thread(uldecoder).start();
+	private List<Socket>    sock_list   = new ArrayList<>();
+	private NsDlMsg         nsdlqueue   = null;
+	private NsUlMsg         nsulqueue   = null;
+	private int             port        = 0;
+	private NsUlDecoder     uldecoder   = null;
+	private WebNsReq        webnsreq    = null;
+	//private static Logger   logger = Logger.getLogger("appserver");
+
+	public NsComm() {
+	}
+
+	public void setPort(int port) {
+		this.port = port;
+	}
+
+	public void setWebnsreq(WebNsReq webnsreq) {
+		this.webnsreq = webnsreq;
+	}
+
+	public void setNsdlqueue(NsDlMsg nsdlqueue) {
+		this.nsdlqueue = nsdlqueue;
+	}
+
+	public void setNsulqueue(NsUlMsg nsulqueue) {
+		this.nsulqueue = nsulqueue;
+	}
+
+	public void setUldecoder(NsUlDecoder uldecoder) {
+		this.uldecoder = uldecoder;
 	}
 
 	public void start() {
-		NsListen listen=new NsListen(5000);
+		NsListen listen=new NsListen();
 		NsUpLink uplink=new NsUpLink();
 		NsDnLink dnlink=new NsDnLink();
-		
+
+		new Thread(uldecoder).start();
 		new Thread(listen).start();
 		new Thread(uplink).start();
 		new Thread(dnlink).start();
 	}
 
 	class NsListen implements Runnable {
-		public NsListen(int p) {
-			// TODO Auto-generated constructor stub
-			port=p;
-			sock_list    = new LinkedList<Socket>();
-		}
-
 		public void run() {
-			// TODO Auto-generated method stub
 			ServerSocket serv=null;
 
 			try {
 				serv = new ServerSocket(port);
 			}
 			catch (Exception e) {
-				e.printStackTrace();
+				Main.logger.error("", e);
+
 				return;
 			}
-			
+
 			new Thread(new NsUpLink()).start();
 			new Thread(new NsDnLink()).start();
 
@@ -66,7 +71,7 @@ public class NsComm {
 					sock_list.add(s);
 				}
 				catch (Exception e) {
-					e.printStackTrace();
+					Main.logger.error("", e);
 				}
 			}
 		}
@@ -75,19 +80,21 @@ public class NsComm {
 	class NsUpLink implements Runnable {
 
 		public void run() {
-			// TODO Auto-generated method stub
+			byte[] buf  = new byte[4096];
+
 			while(true) {
 				if (sock_list.isEmpty()){
 					try {
 						Thread.sleep(10);
 					}
 					catch(Exception e) {
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
+
 					continue;
 				}
 
-				LinkedList<Socket> list     = (LinkedList<Socket>) sock_list.clone();
+				List<Socket> list     = new ArrayList<>(sock_list);
 				Iterator<Socket>   iterator = list.iterator();
 
 				Socket s;
@@ -97,39 +104,62 @@ public class NsComm {
 
 					if (s.isClosed()) {
 						sock_list.remove(s);
-						System.out.println("ns break");
+						Main.logger.warn("ns套接字关闭了");
+
 						continue;
 					}
 
 					try {
 						InputStream in  = s.getInputStream();
 						int         len = in.available();
+
 						if (len<=0) {
 							continue;
 						}
-
-						byte[] buf  = new byte[len];
-						NsUlMsg msg = new NsUlMsg(s);
 						
-						in.read(buf, 0, len);
+						do {
+							Thread.sleep(200);
+							
+							int curlen = in.available();
+							
+							if (curlen == len)
+								break;
+							
+							len = curlen;
+						} while(true);
 
-						if (!msg.Load(buf)) {
+						len = in.read(buf, 0, buf.length);
+						if (len <= 0) {
+							Main.logger.error("NS读取失败\n");
 							continue;
 						}
 
-						uldecoder.put(msg);
-						// ������Ϣ
+						List<NsUlMsg> msgs = NsUlMsg.Load(buf, len, s);
+
+						if (msgs.size() < 1) {
+							Main.logger.error("NS上行加载失败，长度:"+len+"\n");
+							continue;
+						}
+
+						Main.logger.debug("收到NS上行消息，放到消息处理队列");
+
+						for (NsUlMsg m : msgs) {
+							nsulqueue.put(m);
+						}
+						// 处理消息
 					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
+
 						try {
 							s.close();
 							sock_list.remove(s);
-							System.out.println("ns break");
+							Main.logger.warn("ns break");
 						} catch (IOException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
+							Main.logger.error("", e1);
 						}
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
 					}
 				}
 			}
@@ -139,20 +169,20 @@ public class NsComm {
 	class NsDnLink implements Runnable {
 
 		public void run() {
-			// TODO Auto-generated method stub
 			while(true) {
 				Socket   s     = null;
 				WebNsReq dmsg  = null;
 				NsDlMsg  dlmsg = null;
-				
-				HashMap<Long, Socket > nsconn_list = (HashMap<Long, Socket>) uldecoder.nsconn_list.clone();
 
-				if (nsdlqueue.isEmpty() && webnsgreq.isEmpty()) {
+				Map<Long, Socket > nsconn_list = new HashMap<>();
+
+				nsconn_list.putAll(uldecoder.nsconn_list);
+
+				if (nsdlqueue.isEmpty() && webnsreq.isEmpty()) {
 					try {
 						Thread.sleep(10);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
 
 					continue;
@@ -161,36 +191,39 @@ public class NsComm {
 				try {
 					if (!nsdlqueue.isEmpty()) {
 						dlmsg = nsdlqueue.poll();
-	
+
 						if (dlmsg!=null && nsconn_list.containsKey(dlmsg.id)) {
 							s = nsconn_list.get(dlmsg.id);
 							s.getOutputStream().write(dlmsg.getBytes());
+							Main.logger.debug("下行消息发送到NS"+dlmsg.id);
 						}
 					}
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					Main.logger.error("", e);
+
 					try {
 						s.close();
 						nsconn_list.remove(dlmsg.id);
 					} catch (IOException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
+						Main.logger.error("", e1);
 					}
 				}
 
 				try {
-					if (webnsgreq.isEmpty()) {
+					if (webnsreq.isEmpty()) {
 						continue;
 					}
 
-					ArrayList<WebNsReq> list     = (ArrayList<WebNsReq>) webnsgreq.clone();
+					List<WebNsReq> list     = webnsreq.getWebNsReq();
 					Iterator<WebNsReq>  itorator = list.iterator();
 
 					while(itorator.hasNext()) {
 						dmsg = itorator.next();
+
 						if (!nsconn_list.containsKey(dmsg.dlmsg.id)) {
 							dmsg.state = WebNsReq.STATE_FAIL;
+							Main.logger.warn("下行消息发送到NS"+dmsg.dlmsg.id+"失败");
+
 							continue;
 						}
 
@@ -201,24 +234,22 @@ public class NsComm {
 						}
 					}
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					Main.logger.error("", e);
 					dmsg.state = WebNsReq.STATE_FAIL;
+
 					try {
 						s.close();
 						nsconn_list.remove(dmsg.dlmsg.id);
 					} catch (IOException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
+						Main.logger.error("", e1);
 					}
 				}
-				
+
 				if (nsdlqueue.isEmpty()) {
 					try {
 						Thread.sleep(10);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
 				}
 			}

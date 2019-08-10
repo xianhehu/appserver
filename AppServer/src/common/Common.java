@@ -1,7 +1,8 @@
+package common;
 import java.util.Date;
 
 public class Common {
-	static short b2int16(byte[] buf) {
+	public static short b2int16(byte[] buf) {
 		int ret = 0;
 		
 		ret += (buf[0]&0xff)<< 8;
@@ -10,7 +11,7 @@ public class Common {
 		return (short)ret;
 	}
 	
-	static int b2int32(byte[] buf) {
+	public static int b2int32(byte[] buf) {
 		int ret = 0;
 		
 		ret += (buf[0]&0xff)<<24;
@@ -21,7 +22,7 @@ public class Common {
 		return ret;
 	}
 	
-	static long b2int64(byte[] buf) {
+	public static long b2int64(byte[] buf) {
 		long ret = 0;
 		
 		ret += (buf[0]&0xff)<<56;
@@ -36,14 +37,14 @@ public class Common {
 		return ret;
 	}
 	
-	static byte[] subbytes(byte[] buf, int start, int end) {
+	public static byte[] subbytes(byte[] buf, int start, int end) {
 		byte[] ret = new byte[end-start];
 		System.arraycopy(buf, start, ret, 0, end-start);
 		
 		return ret;
 	}
 	
-	static long getTime() {
+	public static long getTime() {
 		return new Date().getTime();
 	}
 }

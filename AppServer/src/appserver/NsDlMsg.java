@@ -1,10 +1,33 @@
+﻿package appserver;
 import com.google.gson.JsonObject;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class NsDlMsg {
 	public long       id      = 0;
 	public int        version = 1;
 	public int        type    = 0;
 	public JsonObject jmsg    = null;
+	static private BlockingQueue<NsDlMsg> dlqueue = new LinkedBlockingQueue<>();
+	
+	public NsDlMsg() {
+		// TODO Auto-generated constructor stub
+	}
+	
+	public synchronized NsDlMsg poll() {
+		if (dlqueue.isEmpty())
+			return null;
+		
+		return dlqueue.poll();
+	}
+	
+	public synchronized void put(NsDlMsg msg) {
+		dlqueue.add(msg);
+	}
+	
+	public synchronized boolean isEmpty() {
+		return dlqueue.isEmpty();
+	}
 
 	public byte[] getBytes() {
 		int i = 0;

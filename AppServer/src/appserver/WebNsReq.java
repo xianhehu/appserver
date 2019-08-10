@@ -1,4 +1,9 @@
+﻿package appserver;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+
+import common.Common;
 
 public class WebNsReq {
 	public long    time    = 0;
@@ -7,10 +12,26 @@ public class WebNsReq {
 	public NsDlMsg dlmsg   = null;
 	public Socket  sock    = null;
 	public boolean confirm = false;
-	
+	private static List<WebNsReq> reqlist = new ArrayList<>();
+
 	public WebNsReq() {
-		// TODO Auto-generated constructor stub
 		time = Common.getTime();
+	}
+
+	public synchronized void addWebNsReq(WebNsReq req) {
+		reqlist.add(req);
+	}
+
+	public synchronized void delWebNsReq(WebNsReq req) {
+		reqlist.remove(req);
+	}
+
+	public synchronized List<WebNsReq> getWebNsReq() {
+		return new ArrayList<>(reqlist);
+	}
+
+	public synchronized boolean isEmpty() {
+		return reqlist.isEmpty();
 	}
 
 	static final public int STATE_WAIT = 0;
@@ -19,3 +40,4 @@ public class WebNsReq {
 	static final public int STATE_FAIL = 3;
 	static final public int STATE_TMOT = 4;
 }
+

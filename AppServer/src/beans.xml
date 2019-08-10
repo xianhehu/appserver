@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+    
+    <bean id="Log4jConfig" class="common.Log4jConfig">
+    	<constructor-arg name="path" value="C:\appserver\log4j.properties" />
+    	<constructor-arg name="interval" value="60000" />
+    	<constructor-arg name="reload" value="true" />
+    </bean>
+
+	<bean id="DBManager" class="common.DBManager">
+       	<!--property name="message" value="Hello World!"/-->
+       	<!--constructor-arg name="url" value="jdbc:MySQL://localhost:3306/test"/-->
+       	<constructor-arg name="url" value="jdbc:MySQL://192.168.199.104:3306/test"/>
+       	<constructor-arg name="user" value="canal"/>
+       	<constructor-arg name="pass" value="canal"/>
+   	</bean>
+
+   	<bean id="WebNsReq" class="appserver.WebNsReq">
+   	</bean>
+   	
+   	<bean id="NsDlMsg" class="appserver.NsDlMsg">
+   	</bean>
+   	
+   	<bean id="NsUlMsg" class="appserver.NsUlMsg">
+   	</bean>
+   	
+   	<bean id="UserUpt" class="appserver.UserUpt">
+   	</bean>
+   	
+   	<bean id="WebNsDevUptReq" class="appserver.WebNsDevUptReq">
+   	</bean>
+
+	<bean id="WebComm" class="appserver.WebComm">
+       	<!--property name="message" value="Hello World!"/-->
+       	<property name="port" value="1935"/>
+       	<property name="dbm" ref="DBManager"/>
+       	<property name="userupt" ref="UserUpt"/>
+       	<property name="webnsreqlist" ref="WebNsReq"/>
+       	<property name="webnsuptlist" ref="WebNsDevUptReq"/>
+   	</bean>
+   	
+   	<bean id="NsComm" class="appserver.NsComm">
+       	<!--property name="message" value="Hello World!"/-->
+       	<property name="port" value="5000"/>
+       	<property name="webnsreq" ref="WebNsReq"/>
+       	<property name="nsdlqueue" ref="NsDlMsg"/>
+       	<property name="nsulqueue" ref="NsUlMsg"/>
+       	<property name="uldecoder" ref="NsUlDecoder"/>
+   	</bean>
+
+   	<bean id="NsUlDecoder" class="appserver.NsUlDecoder">
+       	<property name="maxdevdatanum" value="5000"/>
+       	<property name="dbm" ref="DBManager"/>
+       	<property name="webnsreqlist" ref="WebNsReq"/>
+       	<property name="dlqueue" ref="NsDlMsg"/>
+       	<property name="ulqueue" ref="NsUlMsg"/>
+       	<property name="userupt" ref="UserUpt"/>
+   	</bean>
+</beans>

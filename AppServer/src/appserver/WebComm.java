@@ -1,40 +1,66 @@
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Iterator;
+﻿package appserver;
+import java.io.*;
+import java.net.*;
+import java.sql.*;
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonPrimitive;
+import org.apache.log4j.Logger;
+import com.google.gson.*;
+import common.Common;
+import common.DBManager;
+import appserver.Main;
 
 public class WebComm {
-	private int                           port          = 5001;
-	private ArrayList<Socket>             sock_list     = null;
-	private ArrayList<WebNsReq>           webnsreqlist  = null;
-	private ArrayList<WebNsDevUptReq>     webnsuptlist  = null;
-	private LinkedBlockingQueue<WebReq>   webreqqueue   = null;
-	private LinkedBlockingQueue<WebAck>   webackqueue   = null;
-	
+	private int                      port          = 5001;
+	private List<Socket>             sock_list     = null;
+	private DBManager                dbm           = null;
+	private WebNsReq                 webnsreqlist  = null;
+	private WebNsDevUptReq           webnsuptlist  = null;
+	private BlockingQueue<WebReq>    webreqqueue   = null;
+	private BlockingQueue<WebAck>    webackqueue   = null;
+	private UserUpt                  userupt       = null;
+	//private static Logger logger = Logger.getLogger("appserver");
+
 	private final static int FREQ_TYPE_CUSTOM = 3;
 
-	public WebComm(int p, 
+/*	public WebComm(int p,
 			       ArrayList<WebNsReq>  list1) {
-		// TODO Auto-generated constructor stub
 		port          = p;
 		webnsreqlist  = list1;
 		sock_list     = new ArrayList<Socket>();
 		webreqqueue   = new LinkedBlockingQueue<WebReq>();
 		webackqueue   = new LinkedBlockingQueue<WebAck>();
 		webnsuptlist  = new ArrayList<>();
+	}*/
+
+	public WebComm() {
+		sock_list     = new ArrayList<Socket>();
+		webreqqueue   = new LinkedBlockingQueue<WebReq>();
+		webackqueue   = new LinkedBlockingQueue<WebAck>();
+//		webnsuptlist  = new ArrayList<>();
 	}
-	
+
+	public void setPort(int port) {
+		this.port = port;
+	}
+
+	public void setDbm(DBManager dbm) {
+		this.dbm = dbm;
+	}
+
+	public void setUserupt(UserUpt userupt) {
+		this.userupt = userupt;
+	}
+
+	public void setWebnsreqlist(WebNsReq webnsreqlist) {
+		this.webnsreqlist = webnsreqlist;
+	}
+
+	public void setWebnsuptlist(WebNsDevUptReq webnsuptlist) {
+		this.webnsuptlist = webnsuptlist;
+	}
+
 	public void start() {
 		new Thread(new WebListen()).start();
 		new Thread(new WebDnLink()).start();
@@ -44,18 +70,21 @@ public class WebComm {
 	}
 
 	private JsonArray getDevsData(String SessId, DBManager dbm) {
-		JsonArray devs   = new JsonArray();
-		String    sql    = String.format("select * from devs where DevEUI in "
-				+ "(select DevEUI from userdev where ID=(select ID from session "
-				+ "where SessId=\"%s\"))", SessId);
-		ResultSet ret   = dbm.query(sql);
-		if (ret==null)
+		JsonArray devs = new JsonArray();
+		String    sql  = "select d.* from devs d, userdev u, session s where d.DevEUI=u.DevEUI and u.ID=s.ID and s.SessId=\""+SessId+"\""
+				+ " order by d.UpdateTime desc";
+		ResultSet ret  = dbm.query(sql);
+
+		if (ret == null) {
+			Main.logger.error("会话"+SessId+"对应的用户没有设备");
+
 			return null;
-		
+		}
+
 		try {
 			while(ret.next()) {
 				JsonObject dev = new JsonObject();
-				
+
 				dev.addProperty("DevEUI"  , ret.getLong("DevEUI"));
 				dev.addProperty("GwID"    , ret.getLong("GwId"));
 				dev.addProperty("DevAddr" , ret.getLong("DevAddr"));
@@ -70,26 +99,28 @@ public class WebComm {
 				dev.addProperty("CodeRate", ret.getString("CodeRate"));
 				dev.addProperty("RecvTime", ret.getString("RecvTime"));
 				dev.addProperty("AppData" , ret.getString("AppData"));
-				
+
 				devs.add(dev);
 			}
 		}
 		catch (Exception e) {
-			// TODO: handle exception
-			e.printStackTrace();
+			Main.logger.error("", e);
 		}
 
 		return devs;
 	}
-	
+
 	private JsonArray getGwsData(String SessId, DBManager dbm) {
-		JsonArray gws   = new JsonArray();
-		String    sql   = String.format("select * from gws where GwID in "
-				+ "(select GwID from usergw where ID=(select ID from session "
-				+ "where SessId=\"%s\"))", SessId);
-		ResultSet ret   = dbm.query(sql);
-		if (ret==null)
+		JsonArray gws = new JsonArray();
+		String sql    = "select d.* from gws d, usergw u, session s where d.GwID=u.GwID and u.ID=s.ID and s.SessId=\""+SessId+"\""
+				+ " order by d.UpdateTime desc";
+		ResultSet ret = dbm.query(sql);
+
+		if (ret==null) {
+			Main.logger.error("会话"+SessId+"对应的用户没有网关");
+
 			return null;
+		}
 
 		try {
 			while(ret.next()) {
@@ -106,13 +137,12 @@ public class WebComm {
 				gw.addProperty("AckR", ret.getLong("AckR")  );
 				gw.addProperty("DwNb", ret.getLong("DwNb")  );
 				gw.addProperty("TxNb", ret.getLong("TxNb")  );
-				
+
 				gws.add(gw);
 			}
 		}
 		catch (Exception e) {
-			// TODO: handle exception
-			e.printStackTrace();
+			Main.logger.error("", e);
 		}
 
 		return gws;
@@ -122,14 +152,13 @@ public class WebComm {
 
 		@Override
 		public void run() {
-			// TODO Auto-generated method stub
 			ServerSocket serv = null;
 
 			try {
 				serv = new ServerSocket(port);
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				Main.logger.error("", e);
+
 				return;
 			}
 
@@ -138,10 +167,10 @@ public class WebComm {
 					Socket s = serv.accept();
 
 					if (!sock_list.isEmpty()) {
-						ArrayList<Socket> list     = (ArrayList<Socket>) sock_list.clone();
+						List<Socket> list     = new ArrayList<>(sock_list);
 						Iterator<Socket>  iterator = list.iterator();
 						Socket s1 = null;
-	
+
 						while (iterator.hasNext()) {
 							s1 = iterator.next();
 
@@ -153,25 +182,24 @@ public class WebComm {
 
 					sock_list.add(s);
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					Main.logger.error("", e);
 				}
 			}
 		}
 	}
-	
+
 	class WebUpLink implements Runnable {
 		@Override
 		public void run() {
-			// TODO Auto-generated method stub
+
 			while(true) {
 				if (webackqueue.isEmpty()) {
 					try {
 						Thread.sleep(10);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
+
 					continue;
 				}
 
@@ -180,30 +208,29 @@ public class WebComm {
 				try {
 					OutputStream out = weback.sock.getOutputStream();
 
-					System.out.println(weback.jmsg);
+					Main.logger.debug("web请求回复:"+weback.jmsg);
+
 					out.write(weback.jmsg.getBytes());
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					Main.logger.error("", e);
 				}
 			}
 		}
 	}
-	
+
 	class WebDnLink implements Runnable {
 		@Override
 		public void run() {
 			while (true) {
-				// TODO Auto-generated method stub
-				ArrayList<Socket> list = (ArrayList<Socket>) sock_list.clone();
+				List<Socket> list = new ArrayList<>(sock_list);
 
 				if (list.isEmpty()) {
 					try {
 						Thread.sleep(10);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
+
 					continue;
 				}
 
@@ -232,15 +259,17 @@ public class WebComm {
 
 						webreq.sock = s;
 						webreq.jmsg = jreq;
+
+						Main.logger.debug("web请求转发");
+
 						webreqqueue.add(webreq);
 					} catch (Exception e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
+
 						try {
 							s.close();
 						} catch (Exception e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
+							Main.logger.error("", e1);
 						}
 					}
 				}
@@ -249,101 +278,117 @@ public class WebComm {
 	}
 
 	class WebReqHandle implements Runnable {
-		
-		private DBManager dbm = null;
-		
+
 		public WebReqHandle() {
-			// TODO Auto-generated constructor stub
-			dbm = new DBManager();
-			dbm.connect();
+
 		}
-		
+
 		boolean validSession(WebReq webreq) {
 			if (!(webreq.jmsg.has("SessId")&&webreq.jmsg.has("SessKey"))) {
 				invalidReq(webreq);
+				Main.logger.error("无效的web请求:"+webreq.jmsg);
+
 				return false;
 			}
-			
+
 			String SessId   = webreq.jmsg.get("SessId").getAsString();
 			String SessKey  = webreq.jmsg.get("SessKey").getAsString();
-			
+
 			String sql = String.format("select SessKey from session where SessId=\"%s\"", SessId);
-			
-			ResultSet ret = dbm.query(sql);
-			if (ret==null)
-				return false;
-			
-			WebAck     weback = new WebAck();
-			JsonObject jmsg   = new JsonObject();
-			boolean    error  = false;
-			
-			weback.sock = webreq.sock;
-			
+
 			try {
-				if (!ret.next()) {
+				ResultSet ret = dbm.query(sql);
+
+				if (ret==null || ret.wasNull()) {
+					Main.logger.error("没有会话"+SessId+"的连接记录");
+
+					return false;
+				}
+
+				WebAck     weback = new WebAck();
+				JsonObject jmsg   = new JsonObject();
+				boolean    error  = false;
+
+				weback.sock = webreq.sock;
+
+				try {
+					if (!ret.next()) {
+						jmsg.addProperty("Status", 0);
+						jmsg.addProperty("Error", "Session don't exist");
+						error = true;
+					}
+					else if (!SessKey.equals(ret.getString("SessKey"))) {
+						jmsg.addProperty("Status", 0);
+						jmsg.addProperty("Error", "Session Key error");
+						error = true;
+					}
+				} catch (SQLException e) {
+					Main.logger.error("", e);
 					jmsg.addProperty("Status", 0);
 					jmsg.addProperty("Error", "Session don't exist");
 					error = true;
 				}
-				else if (!SessKey.equals(ret.getString("SessKey"))) {
-					jmsg.addProperty("Status", 0);
-					jmsg.addProperty("Error", "Session Key error");
-					error = true;
+
+				if (!error) {
+					Main.logger.debug("会话"+SessId+"信息OK");
+
+					return true;
 				}
-			} catch (SQLException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-				jmsg.addProperty("Status", 0);
-				jmsg.addProperty("Error", "Session don't exist");
-				error = true;
+
+				weback.jmsg=jmsg.getAsString();
+				webackqueue.add(weback);
+
+				Main.logger.error("会话"+SessId+"信息无效");
+
+			} catch (Exception e) {
+				Main.logger.error("", e);
 			}
-			
-			if (!error) {
-				return true;
-			}
-			
-			weback.jmsg=jmsg.getAsString();
-			webackqueue.add(weback);
+
 			return false;
 		}
-		
+
 		void invalidReq(WebReq req) {
 			WebAck     ack  = new WebAck();
 			JsonObject jmsg = new JsonObject();
-			
+
 			jmsg.addProperty("Status", 0);
 			jmsg.addProperty("Error", "request format invalid!");
-			
+
 			ack.sock = req.sock;
 			ack.jmsg = jmsg.toString();
-			
+
 			webackqueue.add(ack);
 		}
-		
+
 		void login(WebReq webreq) {
 			if (!(webreq.jmsg.has("Username")&&webreq.jmsg.has("Password")
 			    &&webreq.jmsg.has("SessId")&&webreq.jmsg.has("SessKey"))) {
 				invalidReq(webreq);
-				
+				Main.logger.error("错误的登录请求信息:"+webreq.jmsg);
+
 				return;
 			}
-			
+
 			String Username = webreq.jmsg.get("Username").getAsString();
 			String Password = webreq.jmsg.get("Password").getAsString();
 			String SessId   = webreq.jmsg.get("SessId").getAsString();
 			String SessKey  = webreq.jmsg.get("SessKey").getAsString();
-			
+
 			String sql = String.format("select Password, ID from user where Username=\"%s\"", Username);
-			
+
 			ResultSet ret = dbm.query(sql);
-			if (ret==null)
+
+			if (ret==null) {
+				Main.logger.error("没有用户"+Username+"的注册信息");
+
 				return;
-			
+			}
+
 			WebAck     weback = new WebAck();
 			JsonObject jmsg   = new JsonObject();
-			
+
 			weback.sock = webreq.sock;
-			
+
 			try {
 				if (!ret.next()) {
 					jmsg.addProperty("Status", 0);
@@ -356,14 +401,18 @@ public class WebComm {
 				else {
 					long ID = ret.getLong("ID");
 					sql = String.format("select count(*) as RowCount from session where SessId=\"%s\"", SessId);
-					
+
 					ret = dbm.query(sql);
-					if (ret==null)
+
+					if (ret==null) {
+						Main.logger.error("没有会话"+SessId+"的记录");
+
 						return;
-					
+					}
+
 					ret.next();
 					int count = ret.getInt("RowCount");
-					
+
 					if (count>0) {
 						sql = String.format("update session set SessKey=\"%s\" where SessId=\"%s\"", SessKey, SessId);
 					}
@@ -375,27 +424,30 @@ public class WebComm {
 					jmsg.addProperty("Status", 1);
 				}
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				Main.logger.error("", e);
 				jmsg.addProperty("Status", 0);
 				jmsg.addProperty("Error", "Username don't exist");
 			}
 
-			weback.jmsg=jmsg.toString();
+			weback.jmsg = jmsg.toString();
 			webackqueue.add(weback);
+			Main.logger.debug("web登录响应:"+jmsg);
 		}
-		
+
 		void getDevs(WebReq webreq) {
 			WebAck    ack  = new WebAck();
-			String SessId  = webreq.jmsg.get("SessId").getAsString(); 
+			String SessId  = webreq.jmsg.get("SessId").getAsString();
 			JsonArray datas= getDevsData(SessId, dbm);
-			
-			if (datas==null)
+
+			if (datas==null) {
+				Main.logger.error("获取设备数据失败");
+
 				return;
-			
+			}
+
 			ack.sock       = webreq.sock;
 			ack.jmsg       = datas.toString();
-			
+
 			webackqueue.add(ack);
 		}
 
@@ -403,6 +455,8 @@ public class WebComm {
 			if (!webreq.jmsg.has("Timeout")
 			  ||!webreq.jmsg.has("SessId")) {
 				invalidReq(webreq);
+				Main.logger.error("无效的设备更新请求:"+webreq.jmsg);
+
 				return;
 			}
 
@@ -414,29 +468,49 @@ public class WebComm {
 			req.SessId  = SessId;
 			req.timeout = timeout;
 
+			String sql = "select ID from session where SessId=\""+req.SessId+"\"";
+
+			try {
+				ResultSet ret = dbm.query(sql);
+
+				ret.next();
+
+				req.UserId = ret.getString("ID");
+			} catch (Exception e) {
+				Main.logger.error("", e);
+			}
+
+			Main.logger.debug("会话"+SessId+"的设备更新请求放到处理队列");
+
 			webnsuptlist.add(req);
 		}
 
 		void getDevInfs(WebReq webreq) {
 			if (!webreq.jmsg.has("SessId")) {
 				invalidReq(webreq);
+				Main.logger.error("无效的设备信息请求:"+webreq.jmsg);
+
 				return;
 			}
-			
+
 			WebAck ack     = new WebAck();
 			String SessId  = webreq.jmsg.get("SessId").getAsString();
 			String sql     = String.format("select * from devcfgs where DevEUI in (select DevEUI "
 					+ "from userdev where ID=(select ID from session where SessId=\"%s\"))", SessId);
 			JsonArray infs = new JsonArray();
-			
+
 			ResultSet ret  = dbm.query(sql);
-			if (ret==null)
+
+			if (ret==null) {
+				Main.logger.error("会话"+SessId+"对应用户没有设备配置信息");
+
 				return;
-			
+			}
+
 			try {
 				while(ret.next()) {
 					JsonObject inf = new JsonObject();
-					
+
 					inf.addProperty("DevEUI"         , ret.getLong("DevEui"));
 					inf.addProperty("AppEUI"         , ret.getLong("AppEui"));
 					inf.addProperty("AppKey"         , ret.getString("AppKey"));
@@ -454,16 +528,15 @@ public class WebComm {
 					infs.add(inf);
 				}
 			} catch (Exception e) {
-				// TODO: handle exception
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
-			
+
 			ack.sock = webreq.sock;
 			ack.jmsg = infs.toString();
-			
+
 			webackqueue.add(ack);
 		}
-	
+
 		void cfgDevInfs(WebReq webreq) {
 			if (!(webreq.jmsg.has("Timeout")
 			   && webreq.jmsg.has("DevEUI")
@@ -481,22 +554,26 @@ public class WebComm {
 			   && webreq.jmsg.has("MACMajorVersion")
 			)) {
 				invalidReq(webreq);
+				Main.logger.error("无效的设备信息配置请求:"+webreq.jmsg);
+
 				return;
 			}
-			
+
 			JsonObject req = webreq.jmsg;
 			String     str = req.get("FreqPair").getAsString();
 			String     sql = String.format("select count(*) from devcfgs where DevEui=%d", req.get("DevEUI").getAsLong());
 			ResultSet  ret = dbm.query(sql);
-			
+
 			JsonArray  jfs1;
 			JsonArray  jfs2 = new JsonArray();
-			
+
 			try {
 				jfs1 = new JsonParser().parse(str).getAsJsonArray();
 			}
 			catch(Exception e) {
 				invalidReq(webreq);
+				Main.logger.error("无效的频率列表信息:"+str);
+
 				return;
 			}
 
@@ -508,42 +585,47 @@ public class WebComm {
 				});
 			}
 
-			if (ret==null)
+			if (ret==null) {
+				Main.logger.error("查询是否有设备配置信息失败");
+
 				return;
-			
+			}
+
 			try {
 				sql="";
 				ret.next();
-				if (ret.getLong(1)>0) {
+
+				if (ret.getLong(1) > 0) {
 					sql=String.format("delete from devcfgs where DevEui=%d;", req.get("DevEUI").getAsLong());
-					
+
 					dbm.query(sql);
 				}
 
-				sql=String.format("insert into devcfgs values (%d,%d,\"%s\",%d,%d,%d,%d,%d,%d,%d,%d,%d,\"%s\");", 
-									req.get("DevEUI"      ).getAsLong(), req.get("AppEUI"         ).getAsLong(), req.get("AppKey"  ).getAsString(), 
-									req.get("LoRaMode"    ).getAsLong(), req.get("MACMajorVersion").getAsLong(), req.get("RXDelay1").getAsLong(  ), 
-									req.get("RXDROffset1" ).getAsLong(), req.get("RXDataRate2"    ).getAsLong(), req.get("RXFreq2" ).getAsLong(  ), 
-									req.get("MaxDutyCycle").getAsLong(), req.get("ActivationMode" ).getAsLong(), req.get("FreqType").getAsLong(  ), 
+				sql=String.format("insert into devcfgs values (%d,%d,\"%s\",%d,%d,%d,%d,%d,%d,%d,%d,%d,\"%s\");",
+									req.get("DevEUI"      ).getAsLong(), req.get("AppEUI"         ).getAsLong(), req.get("AppKey"  ).getAsString(),
+									req.get("LoRaMode"    ).getAsLong(), req.get("MACMajorVersion").getAsLong(), req.get("RXDelay1").getAsLong(  ),
+									req.get("RXDROffset1" ).getAsLong(), req.get("RXDataRate2"    ).getAsLong(), req.get("RXFreq2" ).getAsLong(  ),
+									req.get("MaxDutyCycle").getAsLong(), req.get("ActivationMode" ).getAsLong(), req.get("FreqType").getAsLong(  ),
 									req.get("FreqPair"    ).getAsString()  );
 
 				dbm.query(sql);
 
 				sql = String.format("select NsId from (select * from devs) as A where DevEui=%d and Count="
-									+ "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(), 
+									+ "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(),
 									req.get("DevEUI").getAsLong());
-				
+
 				ret = dbm.query(sql);
+
 				if (ret==null)
 					return;
 
 				if (ret.wasNull() || !ret.next()) {
 					WebAck ack = new WebAck();
 					JsonObject obj = new JsonObject();
-					
+
 					obj.addProperty("Status", 0);
 					obj.addProperty("Error" , "Failed to send to ns");
-					
+
 					ack.sock = webreq.sock;
 					ack.jmsg = obj.toString();
 					return;
@@ -554,12 +636,12 @@ public class WebComm {
 				NsDlMsg    dlmsg = new NsDlMsg();
 				JsonObject msg   = new JsonObject();
 				JsonObject req1  = new JsonObject();
-				
+
 				nsreq.confirm = true;
 				nsreq.sock    = webreq.sock;
 				nsreq.timeout = req.get("Timeout").getAsLong();
 				nsreq.dlmsg   = dlmsg;
-				
+
 				dlmsg.id      = nsid;
 				dlmsg.jmsg    = msg;
 				dlmsg.type    = 10;
@@ -587,41 +669,47 @@ public class WebComm {
 
 				msg.add("MoteInfoPush", req1);
 
-				webnsreqlist.add(nsreq);
+				webnsreqlist.addWebNsReq(nsreq);
 			} catch (Exception e) {
-				// TODO: handle exception
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
 		}
-		
+
 		void sendDevData(WebReq webreq) {
 			if (!webreq.jmsg.has("Timeout")
 			  ||!webreq.jmsg.has("DevEUI")
 			  ||!webreq.jmsg.has("FPort")
 			  ||!webreq.jmsg.has("AppData")) {
 				invalidReq(webreq);
+				Main.logger.error("无效的设备数据发送请求:"+webreq.jmsg);
+
 				return;
 			}
 
 			JsonObject req = webreq.jmsg;
 			String     sql = String.format("select NsId from (select * from devs) as A where DevEui=%d and Count="
-					   + "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(), 
+					   + "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(),
 					   req.get("DevEUI").getAsLong());
 
 			ResultSet ret = dbm.query(sql);
-			if (ret==null)
+
+			if (ret==null) {
+				Main.logger.error("查询设备连接的最新NS失败");
+
 				return;
+			}
 
 			try {
 				if (ret.wasNull() || !ret.next()) {
 					WebAck ack = new WebAck();
 					JsonObject obj = new JsonObject();
-					
+
 					obj.addProperty("Status", 0);
 					obj.addProperty("Error" , "Failed to send to ns");
-					
+
 					ack.sock = webreq.sock;
 					ack.jmsg = obj.toString();
+
 					return;
 				}
 
@@ -635,37 +723,40 @@ public class WebComm {
 				nsreq.sock    = webreq.sock;
 				nsreq.timeout = req.get("Timeout").getAsLong();
 				nsreq.dlmsg   = dlmsg;
-				
+
 				dlmsg.id      = nsid;
 				dlmsg.jmsg    = msg;
 				dlmsg.type    = 2;
 				dlmsg.version = 1;
-				
+
 				req1.addProperty("DevEUI" , req.get("DevEUI").getAsLong());
 				req1.addProperty("FPort"  , req.get("FPort").getAsLong());
 				req1.addProperty("AppData", req.get("AppData").getAsString());
 				req1.addProperty("DataLen", req.get("AppData").getAsString().length()/2);
-	
+
 				msg.add("MoteDLData", req1);
 
-				webnsreqlist.add(nsreq);
+				webnsreqlist.addWebNsReq(nsreq);
 			}
 			catch(Exception e) {
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
 		}
 
 		void getGws(WebReq webreq) {
 			WebAck    ack  = new WebAck();
-			String SessId  = webreq.jmsg.get("SessId").getAsString(); 
+			String SessId  = webreq.jmsg.get("SessId").getAsString();
 			JsonArray datas= getGwsData(SessId, dbm);
-			
-			if (datas==null)
+
+			if (datas == null) {
+				Main.logger.error("查询会话"+SessId+"的基站数据失败");
+
 				return;
-			
+			}
+
 			ack.sock       = webreq.sock;
 			ack.jmsg       = datas.toString();
-			
+
 			webackqueue.add(ack);
 		}
 
@@ -673,6 +764,8 @@ public class WebComm {
 			if (!webreq.jmsg.has("Timeout")
 			  ||!webreq.jmsg.has("SessId")) {
 				invalidReq(webreq);
+				Main.logger.error("无效的网关数据更新请求:"+webreq.jmsg);
+
 				return;
 			}
 
@@ -687,102 +780,113 @@ public class WebComm {
 
 			webnsuptlist.add(req);
 		}
-		
+
 		void getGwInfs(WebReq webreq) {
 			if (!webreq.jmsg.has("SessId")) {
 				invalidReq(webreq);
+				Main.logger.error("无效的网关信息请求:"+webreq.jmsg);
+
 				return;
 			}
+
 			WebAck ack     = new WebAck();
 			String SessId  = webreq.jmsg.get("SessId").getAsString();
 			String sql     = String.format("select * from gwcfgs where GwID in (select GwID "
 					+ "from usergw where ID=(select ID from session where SessId=\"%s\"))", SessId);
 			JsonArray infs = new JsonArray();
-			
+
 			ResultSet ret  = dbm.query(sql);
-			if (ret==null)
+
+			if (ret==null) {
+				Main.logger.error("查询会话"+SessId+"的所有网关配置信息失败");
+
 				return;
-			
+			}
+
 			try {
 				while(ret.next()) {
 					JsonObject inf = new JsonObject();
-					
+
 					inf.addProperty("GwID"   , ret.getLong("GwID"));
 					inf.addProperty("TxPower", ret.getLong("TxPower"));
-					
+
 					infs.add(inf);
 				}
 			} catch (Exception e) {
-				// TODO: handle exception
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
-			
+
 			ack.sock = webreq.sock;
 			ack.jmsg = infs.toString();
-			
+
 			webackqueue.add(ack);
 		}
-		
+
 		void cfgGwInfs(WebReq webreq) {
 			if (!(webreq.jmsg.has("Timeout")
 			   && webreq.jmsg.has("GwID"   )
 			   && webreq.jmsg.has("TxPower")
 			)) {
 				invalidReq(webreq);
+				Main.logger.error("无效的网关信息配置请求:"+webreq.jmsg);
+
 				return;
 			}
 
 			JsonObject req = webreq.jmsg;
 			String     sql = String.format("select count(*) from gwcfgs where GwId=%d", req.get("GwID").getAsLong());
 			ResultSet  ret = dbm.query(sql);
-			if (ret==null)
+
+			if (ret == null) {
 				return;
-			
+			}
+
 			try {
 				sql="";
 				ret.next();
 				if (ret.getLong(1)>0) {
 					sql=String.format("delete from gwcfgs where GwId=%d;", req.get("GwID").getAsLong());
-					
+
 					dbm.query(sql);
 				}
-				
+
 				sql=String.format("insert into gwcfgs values (%d,%d);",
 						req.get("GwID").getAsLong(), req.get("TxPower").getAsLong());
-				
+
 				dbm.query(sql);
-				
+
 				sql = String.format("select NsId from (select * from devs) as A where GwId=%d and Count="
-						+ "(select MAX(Count) from devs where GwId=%d);", req.get("GwID").getAsLong(), 
+						+ "(select MAX(Count) from devs where GwId=%d);", req.get("GwID").getAsLong(),
 						req.get("GwID").getAsLong());
-				
+
 				ret = dbm.query(sql);
+
 				if (ret==null)
 					return;
-				
+
 				if (ret.wasNull() || !ret.next()) {
 					WebAck ack = new WebAck();
 					JsonObject obj = new JsonObject();
 
 					obj.addProperty("Status", 0);
 					obj.addProperty("Error" , "Failed to send to ns");
-					
+
 					ack.sock = webreq.sock;
 					ack.jmsg = obj.toString();
 					return;
 				}
-				
+
 				Long       nsid  = ret.getLong("NsId");
 				WebNsReq   nsreq = new WebNsReq();
 				NsDlMsg    dlmsg = new NsDlMsg();
 				JsonObject msg   = new JsonObject();
 				JsonObject req1  = new JsonObject();
-				
+
 				nsreq.confirm = true;
 				nsreq.sock    = webreq.sock;
 				nsreq.timeout = req.get("Timeout").getAsLong();
 				nsreq.dlmsg   = dlmsg;
-				
+
 				dlmsg.id      = nsid;
 				dlmsg.jmsg    = msg;
 				dlmsg.type    = 12;
@@ -793,34 +897,35 @@ public class WebComm {
 
 				msg.add("GwInfoPush", req1);
 
-				webnsreqlist.add(nsreq);
+				webnsreqlist.addWebNsReq(nsreq);
 			} catch (Exception e) {
-				// TODO: handle exception
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
 		}
 
 		@Override
 		public void run() {
-			// TODO Auto-generated method stub
+
 			while(true) {
 				if (webreqqueue.isEmpty()) {
 					try {
 						Thread.sleep(10);
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						Main.logger.error("", e);
 					}
+
 					continue;
 				}
 
 				WebReq webreq = webreqqueue.poll();
+
 				if (!webreq.jmsg.has("Type")) {
 					invalidReq(webreq);
 					continue;
 				}
-				
+
 				String Type = webreq.jmsg.get("Type").getAsString();
+
 				if (Type.equals("Login")) {
 					login(webreq);
 				}
@@ -828,7 +933,7 @@ public class WebComm {
 					if (!validSession(webreq)) {
 						continue;
 					}
-					
+
 					if (Type.equals("GetDevs")) {
 						getDevs(webreq);
 						continue;
@@ -863,35 +968,35 @@ public class WebComm {
 					}
 					if (Type.equals("CfgGwInfos")) {
 						cfgGwInfs(webreq);
+
+						continue;
 					}
+
+					Main.logger.error("无效的web请求类型"+Type);
 				}
 			}
 		}
 	}
-	
+
 	class WebReqTimeout implements Runnable {
-		
-		private DBManager dbm = null;
-		
 		public WebReqTimeout() {
-			// TODO Auto-generated constructor stub
-			dbm = new DBManager();
-			dbm.connect();
+//			dbm = new DBManager();
+//			dbm.connect();
 		}
-		
+
 		void reqTimeout(WebNsReq wnreq) {
 			WebAck     ack = new WebAck();
 			JsonObject obj = new JsonObject();
-			
+
 			obj.addProperty("Status", 0);
 			obj.addProperty("Error" , "Timeout");
 
 			ack.sock = wnreq.sock;
 			ack.jmsg = obj.toString();
-			
+
 			webackqueue.add(ack);
 		}
-		
+
 		void reqResult(WebNsReq wnreq) {
 			WebAck     ack = new WebAck();
 			JsonObject obj = new JsonObject();
@@ -909,34 +1014,22 @@ public class WebComm {
 
 			webackqueue.add(ack);
 		}
-		
+
 		private void updateDevs(WebNsDevUptReq req) {
 			/* check update */
-			String sql = String.format("select count(*) as RowCount from devupt where Upt>0 and "
-					+ "DevEUI in (select DevEUI from userdev where ID=(select"
-					+ " ID from session where SessId=\"%s\"))", req.SessId);
-			ResultSet ret = dbm.query(sql);
-			if (ret==null)
-				return;
-
-			sql = String.format("update devupt set Upt=0 where DevEUI in "
-					+ "(select DevEUI from userdev where ID=(select"
-					+ " ID from session where SessId=\"%s\"))", req.SessId);
+			if (!req.UserId.isEmpty()) {
+				if (!userupt.CheckUserDevicesUpt(req.UserId))
+					return;
+			}
 
 			try {
-				ret.next();
-				if (ret.getInt("RowCount") <= 0) {
-					return;
-				}
-				
-				dbm.query(sql);
+				userupt.UptUserDevices(req.UserId, false);
 
 				WebAck ack = new WebAck();
 				JsonArray datas= getDevsData(req.SessId, dbm);
 
-				if (datas==null)
+				if (datas == null)
 					return;
-				
 
 				ack.sock = req.sock;
 				ack.jmsg = datas.toString();
@@ -944,35 +1037,23 @@ public class WebComm {
 				webackqueue.add(ack);
 				webnsuptlist.remove(req);
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
 		}
-		
+
 		private void updateGws(WebNsDevUptReq req) {
 			/* check update */
-			String sql = String.format("select count(*) as RowCount from gwupt where Upt>0 and "
-					+ "GwId in (select GwId from usergw where ID=(select"
-					+ " ID from session where SessId=\"%s\"))", req.SessId);
-			ResultSet ret = dbm.query(sql);
-			if (ret==null)
-				return;
-
-			sql = String.format("update gwupt set Upt=0 where GwId in "
-					+ "(select GwId from usergw where ID=(select"
-					+ " ID from session where SessId=\"%s\"))", req.SessId);
+			if (!req.UserId.isEmpty()) {
+				if (!userupt.CheckUserGwsUpt(req.UserId))
+					return;
+			}
 
 			try {
-				ret.next();
-				if (ret.getInt("RowCount") <= 0) {
-					return;
-				}
-				
-				dbm.query(sql);
+				userupt.UptUserGws(req.UserId, false);
 
 				WebAck ack = new WebAck();
 				JsonArray datas= getGwsData(req.SessId, dbm);
-				
+
 				if (datas==null)
 					return;
 
@@ -982,57 +1063,57 @@ public class WebComm {
 				webackqueue.add(ack);
 				webnsuptlist.remove(req);
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				Main.logger.error("", e);
 			}
 		}
 
 		@Override
 		public void run() {
-			// TODO Auto-generated method stub
-			
+
 			while (true) {
 				if (!webnsreqlist.isEmpty()) {
-					ArrayList<WebNsReq> list     = (ArrayList<WebNsReq>) webnsreqlist.clone();
+					List<WebNsReq>      list     = webnsreqlist.getWebNsReq();
 					Iterator<WebNsReq>  iterator = list.iterator();
-					
+
 					WebNsReq req = null;
-					
+
 					while(iterator.hasNext()) {
 						req = iterator.next();
 						long now = Common.getTime();
-						
+
 						if (now>req.time+req.timeout) {
 							reqTimeout(req);
-							webnsreqlist.remove(req);
+							webnsreqlist.delWebNsReq(req);
 						}
 						else if (req.state==WebNsReq.STATE_ACK || req.state==WebNsReq.STATE_FAIL) {
 							reqResult(req);
-							webnsreqlist.remove(req);
+							webnsreqlist.delWebNsReq(req);
 						}
 					}
 				}
 
-			    /* ��ʱ��ѯ�豸���� */
+			    /* 定时查询设备数据 */
 				if (!webnsuptlist.isEmpty()) {
-					ArrayList<WebNsDevUptReq> reqlist  = (ArrayList<WebNsDevUptReq>) webnsuptlist.clone();
+					List<WebNsDevUptReq> reqlist  = webnsuptlist.get();
 					Iterator<WebNsDevUptReq>  itorator = reqlist.iterator();
 
 					while(itorator.hasNext()) {
 						WebNsDevUptReq req = (WebNsDevUptReq) itorator.next();
 
-						if (Common.getTime()>req.time+req.timeout) { /* ��ʱ */
+						if (Common.getTime()>req.time+req.timeout) { /* 超时 */
 							WebAck ack = new WebAck();
 							JsonObject obj = new JsonObject();
-							
+
 							obj.addProperty("Status", 0);
 							obj.addProperty("Error" ,  "timeout");
-							
+
 							ack.sock = req.sock;
 							ack.jmsg = obj.toString();
-							
+
 							webackqueue.add(ack);
 							webnsuptlist.remove(req);
+
+							Main.logger.warn("超时web请求:"+req.type);
 						}
 						else {
 							if (req.type==0) {
@@ -1044,22 +1125,21 @@ public class WebComm {
 						}
 					}
 				}
-				
+
 				try {
 					Thread.sleep(10);
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					Main.logger.error("", e);
 				}
 			}
 		}
 	}
-	
+
 	class WebReq {
 		public Socket      sock = null;
 		public JsonObject  jmsg = null;
 	}
-	
+
 	class WebAck {
 		public Socket      sock = null;
 		public String      jmsg = null;
