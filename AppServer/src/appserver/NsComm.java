@@ -214,7 +214,7 @@ public class NsComm {
 						continue;
 					}
 
-					List<WebNsReq> list     = webnsreq.getWebNsReq();
+					List<WebNsReq>      list     = webnsreq.getWebNsReq();
 					Iterator<WebNsReq>  itorator = list.iterator();
 
 					while(itorator.hasNext()) {

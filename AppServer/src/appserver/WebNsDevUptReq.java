@@ -12,6 +12,7 @@ public class WebNsDevUptReq {
 	public long             timeout = 0;
 	public boolean          update  = false;
 	public long             type    = 0;
+	public int              count   = 0;
 	
 	private static List<WebNsDevUptReq> list = new ArrayList<>();
 

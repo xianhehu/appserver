@@ -100,6 +100,11 @@ public class NsUlDecoder implements Runnable {
 		String RecvTime = data.get("RecvTime").getAsString();
 		String AppData  = data.get("AppData").getAsString();
 
+		if (data.has("MacCmd")) {
+			String MacCmd   = data.get("MacCmd").getAsString();
+			AppData = "mac"+MacCmd+"app"+AppData;
+		}
+
 		String UpdateTime = "0";
 
 		try {

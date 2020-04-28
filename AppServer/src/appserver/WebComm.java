@@ -69,10 +69,10 @@ public class WebComm {
 		new Thread(new WebUpLink()).start();
 	}
 
-	private JsonArray getDevsData(String SessId, DBManager dbm) {
+	private JsonArray getDevsData(String SessId, DBManager dbm, int count) {
 		JsonArray devs = new JsonArray();
 		String    sql  = "select d.* from devs d, userdev u, session s where d.DevEUI=u.DevEUI and u.ID=s.ID and s.SessId=\""+SessId+"\""
-				+ " order by d.UpdateTime desc";
+				+ " order by d.UpdateTime desc limit "+count;
 		ResultSet ret  = dbm.query(sql);
 
 		if (ret == null) {
@@ -435,9 +435,10 @@ public class WebComm {
 		}
 
 		void getDevs(WebReq webreq) {
-			WebAck    ack  = new WebAck();
-			String SessId  = webreq.jmsg.get("SessId").getAsString();
-			JsonArray datas= getDevsData(SessId, dbm);
+			WebAck    ack    = new WebAck();
+			String    SessId = webreq.jmsg.get("SessId").getAsString();
+			int       count  = webreq.jmsg.get("Count").getAsInt();
+			JsonArray datas  = getDevsData(SessId, dbm, count);
 
 			if (datas==null) {
 				Main.logger.error("获取设备数据失败");
@@ -462,10 +463,12 @@ public class WebComm {
 
 			long           timeout = webreq.jmsg.get("Timeout").getAsLong();
 			String         SessId  = webreq.jmsg.get("SessId").getAsString();
+			int            count   = webreq.jmsg.get("Count").getAsInt();
 			WebNsDevUptReq req     = new WebNsDevUptReq();
 
 			req.sock    = webreq.sock;
 			req.SessId  = SessId;
+			req.count   = count;
 			req.timeout = timeout;
 
 			String sql = "select ID from session where SessId=\""+req.SessId+"\"";
@@ -678,8 +681,7 @@ public class WebComm {
 		void sendDevData(WebReq webreq) {
 			if (!webreq.jmsg.has("Timeout")
 			  ||!webreq.jmsg.has("DevEUI")
-			  ||!webreq.jmsg.has("FPort")
-			  ||!webreq.jmsg.has("AppData")) {
+			  ) {
 				invalidReq(webreq);
 				Main.logger.error("无效的设备数据发送请求:"+webreq.jmsg);
 
@@ -687,6 +689,13 @@ public class WebComm {
 			}
 
 			JsonObject req = webreq.jmsg;
+
+			String     AppData = req.get("AppData").getAsString();
+			String     MacCmd = req.get("MacCmd").getAsString();
+			
+			if (AppData.isEmpty() && MacCmd.isEmpty())
+				return;
+			
 			String     sql = String.format("select NsId from (select * from devs) as A where DevEui=%d and Count="
 					   + "(select MAX(Count) from devs where DevEui=%d);", req.get("DevEUI").getAsLong(),
 					   req.get("DevEUI").getAsLong());
@@ -730,9 +739,19 @@ public class WebComm {
 				dlmsg.version = 1;
 
 				req1.addProperty("DevEUI" , req.get("DevEUI").getAsLong());
-				req1.addProperty("FPort"  , req.get("FPort").getAsLong());
-				req1.addProperty("AppData", req.get("AppData").getAsString());
-				req1.addProperty("DataLen", req.get("AppData").getAsString().length()/2);
+				if (!AppData.isEmpty()) {
+					req1.addProperty("FPort"  , req.get("FPort").getAsLong());
+					req1.addProperty("AppData", req.get("AppData").getAsString());
+					req1.addProperty("DataLen", AppData.length()/2);
+				}
+				else {
+					req1.addProperty("FPort"  , 0);
+					req1.addProperty("AppData", "");
+					req1.addProperty("DataLen", 0);
+				}
+				
+				if (req.has("MacCmd"))
+					req1.addProperty("MacCmd", req.get("MacCmd").getAsString());
 
 				msg.add("MoteDLData", req1);
 
@@ -1026,7 +1045,7 @@ public class WebComm {
 				userupt.UptUserDevices(req.UserId, false);
 
 				WebAck ack = new WebAck();
-				JsonArray datas= getDevsData(req.SessId, dbm);
+				JsonArray datas= getDevsData(req.SessId, dbm, req.count);
 
 				if (datas == null)
 					return;
